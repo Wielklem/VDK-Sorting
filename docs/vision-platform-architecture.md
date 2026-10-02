@@ -97,7 +97,7 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 ### 30.20 Tech stack
 | Layer | Choice | Status |
 |---|---|---|
-| Language | C++20 (Python only for offline tools and training) | [V1] |
+| Language | C++23 (Python only for offline tools and training) | [V1] |
 | Build | CMake presets + vcpkg; CI builds on Ubuntu and Windows | [V1] |
 | Compiler | GCC 13 (Ubuntu); MSVC 2022 (Windows, CI only in V1) | [V1] |
 | OS | Ubuntu LTS 24.04 (target); Windows 10/11 x64 (prepared) | [V1] / Windows [LATER] |
@@ -272,8 +272,8 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 ### V1: shadow mode (P10–P90) [V1]
 
 #### P10 Foundations (M10, M20)
-- **P10.10  [DONE]** Create the Git repo as a mono-repo: `/service`, `/hmi`, `/common`, `/tools`, `/firmware` (empty), `/docs`. Add branching strategy, `.gitignore`, `.clang-format` and `.clang-tidy`.
-- **P10.20** Set up a CMake superbuild with presets (debug, release) for Linux and Windows, and a vcpkg manifest for Qt 6, OpenCV, cppzmq, spdlog, nlohmann-json, SQLite and GoogleTest.
+- **P10.10 [DONE]** Create the Git repo as a mono-repo: `/service`, `/hmi`, `/common`, `/tools`, `/firmware` (empty), `/docs`. Add branching strategy, `.gitignore`, `.clang-format` and `.clang-tidy`.
+- **P10.20 [DONE]** Set up a CMake superbuild with presets (debug, release) for Linux and Windows, and a vcpkg manifest for Qt 6, OpenCV, cppzmq, spdlog, nlohmann-json, SQLite and GoogleTest.
 - **P10.30** Set up the CI pipeline: build and unit tests on Ubuntu and Windows, clang-tidy on Ubuntu, and store build artifacts. A broken Windows build blocks the merge.
 - **P10.40** Build the common library: base types (Timestamp, FrameId, ObjectId), error handling (`std::expected`), and logging (spdlog, rotating files).
 - **P10.45** Build the platform layer (M15): interfaces plus the Linux implementation (M15.10). On Windows, stubs that compile and return "not supported", so CI stays green.
