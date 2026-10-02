@@ -1,0 +1,494 @@
+# Vision Sorting Platform — Architecture & Build Order
+
+Version 0.1 · 2026-10-01
+
+---
+
+## 0. Status markers
+
+Every module, page, tab and phase carries one marker.
+
+| Marker | Meaning |
+|---|---|
+| **[V1]** | Fully implemented in the initial version (shadow mode) |
+| **[PARTIAL]** | Partially implemented in V1; completed later |
+| **[LATER]** | Not implemented in V1; interface or placeholder only |
+| **[REDO]** | Implemented in V1 but will need a complete rework or replacement in the final version |
+
+Markers can be combined, e.g. **[V1][REDO]**.
+
+---
+
+## 10. Scope
+
+### 10.10 Initial version (V1): shadow mode
+- An external PLC (not ours) triggers cameras and lights and drives the ejectors. There is **no communication** between the vision PC and that PLC.
+- The vision PC receives **camera images only**, from Daheng cameras in hardware-trigger mode.
+- V1 does live view, ROI setup, tracking by frame sequence, analytics, grading (shadow decisions), data and stats, and diagnostics on the camera side.
+- V1 does **not** actuate anything.
+
+### 10.20 Final version
+- Our own controller (PLC or self-built PCB) acts as a **dumb, deterministic executor**. It holds no settings and no logic beyond its fixed generic program.
+- The vision PC and GUI own all configuration: IO mapping, trigger, light and eject timing, encoder relations, machine layout, sorting specs.
+- Ejection is encoder-position-based with µs-level output accuracy.
+
+---
+
+## 20. Numbering convention
+
+Numbers step by 10 (sections, modules, phases) so new items slot in without renumbering. Numbers are never reused.
+
+| Item | Format | Example | Insert between |
+|---|---|---|---|
+| Doc section | multiple of 10 | 80. Tracking | 85 |
+| Module | `M` + multiple of 10 | M30 Camera acquisition | M35 |
+| Sub-module | module + `.` + multiple of 10 | M30.10 Daheng adapter | M30.15 |
+| Controller function | `C` + multiple of 10 | C50 Eject queue | C55 |
+| GUI page | `G` + module number | G30 Cameras | G35 |
+| GUI tab | page + `.` + multiple of 10 | G30.10 Live view | G30.15 |
+| Build phase | `P` + multiple of 10 | P40 Tracking | P45 |
+| Message type | `MSG-<module>-<nn>` | MSG-30-01 Frame | sequential per module |
+
+Phase blocks: **P10–P90 = V1**, **P100–P190 = controller and live sorting**, **P200+ = extensions**.
+
+---
+
+## 30. System architecture
+
+```mermaid
+flowchart LR
+  subgraph Field
+    ENC[Encoder]
+    CAM[Daheng cameras]
+    LGT[Lights]
+    TIP[Tippers]
+  end
+  subgraph CTRL[Controller: PLC or PCB]
+    FW[Generic fixed program C10–C90]
+  end
+  subgraph PC[Vision PC]
+    SVC[Vision service M10–M90, M110–M130]
+    HMI[HMI M100, pages G20–G130]
+  end
+  ENC --> FW
+  FW -- trigger --> CAM
+  FW -- strobe --> LGT
+  FW -- eject --> TIP
+  CAM -- images --> SVC
+  SVC <-- UDP protocol M45 --> FW
+  SVC <-- shared memory + ZeroMQ --> HMI
+```
+
+In V1 the controller block is the external PLC with **no link** to the PC. Only the camera → service path is used.
+
+### 30.10 Principles
+1. **The PC decides, the controller acts.** The PC never fires outputs directly. Timing accuracy comes from controller hardware timers.
+2. **The service and the HMI are separate processes.** A GUI crash never stops processing.
+3. **Every hardware dependency sits behind an interface:** `ICamera`, `IController`, `ITracker`, `IStorage`.
+4. **Capabilities drive the GUI.** Features the active controller can't support are shown read-only or disabled, never removed.
+5. **Modules communicate only via the message bus**, never through direct calls.
+6. **All configuration lives on the PC**, versioned, and is pushed to the controller on connect and on change.
+
+### 30.20 Tech stack
+| Layer | Choice | Status |
+|---|---|---|
+| Language | C++20 (Python only for offline tools and training) | [V1] |
+| Build | CMake + vcpkg, CI | [V1] |
+| OS | Ubuntu LTS (Windows possible) | [V1] |
+| GUI | Qt 6 LTS, Qt Quick/QML, GPU texture live view | [V1] |
+| IPC | Shared memory (frames) + ZeroMQ (messages) | [V1] |
+| Cameras | Daheng Galaxy C++ SDK (GenICam) | [V1] |
+| Vision | OpenCV | [V1] |
+| Inference | ONNX Runtime / TensorRT | [PARTIAL] |
+| Storage | SQLite + image folders | [V1][REDO] → PostgreSQL/TimescaleDB for multi-line |
+| Controller link | UDP, binary protocol (M45) | [LATER] |
+
+---
+
+## 40. Modules (vision service)
+
+| ID | Module | Responsibility | Interface | Status |
+|---|---|---|---|---|
+| M10 | Core service | Lifecycle, threads, logging, message bus, watchdog | `IModule`, `MessageBus` | [V1] |
+| M20 | Config & recipes | Machine config, recipes, versioning, validation, schema migration | `IConfigStore` | [V1] |
+| M30 | Camera acquisition | Discovery, settings, grabbing, frame IDs, timestamps | `ICamera` | [V1] |
+| M30.10 | Daheng adapter | Galaxy SDK implementation | `ICamera` | [V1] |
+| M30.20 | Replay camera | Plays recorded sets as live | `ICamera` | [V1] |
+| M30.30 | Recorder | Raw frames + metadata to disk | — | [V1] |
+| M30.40 | Trigger source config | V1: external trigger only. Later: trigger plan from own controller | — | [PARTIAL] |
+| M40 | Controller abstraction | Encoder, triggers, lights, ejects, IO, capability flags | `IController` | [V1] interface |
+| M40.10 | Null controller | No capabilities (shadow mode) | `IController` | [V1] |
+| M40.20 | Simulated controller | Fake encoder, trigger log, events, eject acks | `IController` | [PARTIAL] |
+| M40.30 | Own controller adapter | Implements M45 protocol | `IController` | [LATER] |
+| M40.40 | External PLC adapter | Only if a link to a third-party PLC is ever available | `IController` | [LATER] optional |
+| M45 | Controller protocol | Message spec shared by PC and controller firmware | spec + lib | [LATER] |
+| M50 | Object tracking | Frame → lane, object, photo index | `ITracker` | [V1] |
+| M50.10 | Frame-sequence tracker | Counts frames; gap detection; image-based resync | `ITracker` | [V1][REDO] replaced by M50.20 |
+| M50.20 | Encoder tracker | Uses trigger log (trigger nr → encoder count) | `ITracker` | [LATER] |
+| M60 | Image analytics | Stage pipeline + debug overlays | `IAnalysisStage` | [V1] |
+| M60.10 | Basic stages | Preprocess, segmentation, size, dirt % | stage | [V1] |
+| M60.20 | Extended stages | Cracks, shape, colour, shell defects | stage | [LATER] |
+| M60.30 | ML stages | Model inference (ONNX/TensorRT) | stage | [PARTIAL] |
+| M70 | Grading | Sorting specs, rules, grades, decision per object | `IGradingRule` | [V1] (shadow) |
+| M70.20 | Grade → outlet mapping | Which grade goes to which tipper/outlet | — | [LATER] |
+| M75 | Eject planning | Decision → `{tipper, eject_at_count, pulse}`; deadline check | — | [LATER] |
+| M80 | Data & statistics | Results DB, image archive, batch stats, export | `IStorage` | [V1] |
+| M80.20 | Retention & archiving | Auto-cleanup, sampling rules | — | [PARTIAL] |
+| M80.30 | DB backend migration | PostgreSQL/TimescaleDB behind `IStorage` | `IStorage` | [LATER] |
+| M90 | Diagnostics | FPS, drops, latency, queue levels | `IDiagnosticsSource` | [V1] |
+| M90.20 | Controller event timeline | Encoder/trigger/light/eject events, scope view | — | [LATER] |
+| M100 | HMI shell | QML app, navigation, page plugins, IPC client | `IPage` | [V1] |
+| M100.20 | Users & roles | Operator / engineer / admin | — | [PARTIAL] |
+| M110 | Lights control | Strobe timing and intensity via controller | — | [LATER] |
+| M120 | Calibration | px→mm, encoder↔photo, encoder↔tipper, tipper test | — | [PARTIAL] px→mm only |
+| M130 | Machine state | Run/stop/fault, heartbeat, safe-state policy | — | [PARTIAL] service states only |
+| M140 | External integration | MES/ERP export, remote support | — | [LATER] optional |
+
+### 40.10 Core messages
+| ID | Message | Status |
+|---|---|---|
+| MSG-10-01 | Heartbeat | [V1] |
+| MSG-20-01 | ConfigChanged | [V1] |
+| MSG-30-01 | Frame (ID, camera, timestamp, buffer ref) | [V1] |
+| MSG-50-01 | ObjectRecord (object ID, lane, photos) | [V1][REDO] gains encoder position |
+| MSG-60-01 | Measurement | [V1] |
+| MSG-70-01 | Decision | [V1] |
+| MSG-75-01 | EjectCommand | [LATER] |
+| MSG-90-01 | DiagEvent | [V1] |
+| MSG-90-02 | ControllerEvent | [LATER] |
+
+---
+
+## 50. Controller (own PLC/PCB): final version only
+
+Fixed generic program, written once. No machine-specific settings stored; everything is received from the PC. All items are **[LATER]**.
+
+| ID | Function | Detail |
+|---|---|---|
+| C10 | Encoder counting | Hardware counter; position streamed to PC (≤1 kHz) |
+| C20 | Camera triggers | Fire at positions/intervals from the PC's trigger plan |
+| C30 | Trigger log | Trigger nr → encoder count, sent to PC |
+| C40 | Light strobes | Timed with triggers, pulse width from PC |
+| C50 | Eject queue | Per tipper, position-sorted; fire at `eject_at_count` for `pulse` µs |
+| C60 | IO mapping table | Logical function → physical channel, received from PC |
+| C70 | Watchdog & safe state | PC heartbeat lost → safe-state action set by PC |
+| C80 | Event stream | Timestamped events (encoder, triggers, lights, ejects, inputs, late commands) |
+| C90 | Protocol handler | M45 over UDP: sequence nrs, acks, versioning |
+
+The emergency stop is a hardwired safety circuit, independent of PC and controller.
+
+### 50.10 Controller protocol (M45) message set [LATER]
+`Hello/Version` · `ConfigPush` (IO map, timings) · `TriggerPlan` · `EjectBatch` · `Heartbeat` · `EncoderStatus` · `TriggerLog` · `EventStream` · `Ack/Nack` · `Fault`
+
+---
+
+## 60. GUI pages
+
+Each page is a QML plugin with tabs. Visibility depends on controller capabilities and user role.
+
+| Page | Tabs | Status |
+|---|---|---|
+| **G20 Machine** | G20.10 Lines & lanes [V1] · G20.20 Cameras per lane [V1] · G20.30 Tippers [PARTIAL] logical only · G20.40 Recipes [V1] | [V1] |
+| **G30 Cameras** | G30.10 Live view, all cameras, freeze/unfreeze [V1] · G30.20 ROI [V1] · G30.30 Exposure/gain [V1] · G30.40 Calibration px→mm [V1] · G30.50 Record/replay [V1] | [V1] |
+| **G40 Controller** | G40.10 Status [PARTIAL] "no controller" · G40.20 IO mapping [LATER] · G40.30 Connection/firmware [LATER] | [PARTIAL] |
+| **G50 Tracking** | G50.10 Photos per object [V1][REDO] · G50.20 Pitch in frames [V1][REDO] → encoder counts · G50.30 Lane ROIs [V1] · G50.40 Resync [V1][REDO] | [V1][REDO] |
+| **G60 Analytics** | G60.10 Pipeline stages [V1] · G60.20 Parameters [V1] · G60.30 Debug overlays [V1] · G60.40 Models [PARTIAL] | [V1] |
+| **G70 Sorting specs** | G70.10 Grades [V1] · G70.20 Rules (size, dirt %, …) [V1] · G70.30 Shadow decisions [V1] · G70.40 Grade → outlet [LATER] | [V1] |
+| **G80 Production** | G80.10 Live batch stats [V1] · G80.20 History [V1] · G80.30 Image browser [V1] · G80.40 Export [PARTIAL] | [V1] |
+| **G90 Diagnostics** | G90.10 Camera FPS/drops [V1] · G90.20 Latency/queues [V1] · G90.30 Event timeline/scope [LATER] | [PARTIAL] |
+| **G100 System** | G100.10 Users & roles [PARTIAL] · G100.20 Logs [V1] · G100.30 Version/update [V1] | [V1] |
+| **G110 Lights** | G110.10 Strobe timing [LATER] · G110.20 Intensity [LATER] | [LATER] |
+| **G120 Timing & calibration** | G120.10 Encoder ↔ photo [LATER] · G120.20 Encoder ↔ roller ↔ tipper [LATER] · G120.30 Tipper test/jog [LATER] | [LATER] |
+| **G130 Machine state** | G130.10 Run/stop/fault [PARTIAL] · G130.20 Safe-state policy [LATER] | [PARTIAL] |
+
+---
+
+## 70. Tracking & timing
+
+| Aspect | V1 (frame-sequence) | Final (encoder) | Status |
+|---|---|---|---|
+| Object identity | Frame count ÷ photos per object | Trigger log → encoder count → cup/roller index | [REDO] |
+| Photo timing | Set in external PLC (not ours) | Trigger plan from GUI (G120.10) | [LATER] |
+| Lane assignment | Fixed ROI per lane | Same | [V1] |
+| Frame loss | Gap detection, mark "untracked" | Gap detection + exact recovery via trigger log | [V1][REDO] |
+| Resync | Image-based (cup/roller edge) | Encoder reference; image-based as check | [V1][REDO] |
+| Eject timing | — | `eject_at_count` = object count + offset + mechanical delay (G120.20) | [LATER] |
+| Late decision | — | Controller applies default action and logs it | [LATER] |
+
+**Assumptions for V1:**
+- Each hardware trigger increments the camera frame ID by exactly one.
+- Photos per object and pitch are constant.
+- Lanes are separated by fixed ROIs.
+
+---
+
+## 80. Data model
+
+| Entity | Key fields | Status |
+|---|---|---|
+| Batch | ID, recipe version, start/stop, operator | [V1] |
+| Object | ID, batch, lane, seq nr, encoder pos | [V1][REDO] encoder pos added |
+| Photo | object, camera, frame ID, timestamp, file ref | [V1] |
+| Measurement | object, stage, values | [V1] |
+| Decision | object, grade, rule hits, shadow/live flag | [V1] |
+| EjectRecord | object, tipper, planned count, fired/late | [LATER] |
+| Event | source, type, timestamp, payload | [PARTIAL] |
+| ConfigVersion | config/recipe snapshot, author, time | [V1] |
+
+Images are stored on disk (rejects plus samples), with paths in the database.
+
+---
+
+## 90. Reliability
+
+| Item | Status |
+|---|---|
+| Service runs as system service with auto-restart | [V1] |
+| HMI crash-isolated from service | [V1] |
+| Internal watchdog per module | [V1] |
+| Config versioning + rollback | [V1] |
+| Controller heartbeat + safe state | [LATER] |
+| Shadow vs live comparison mode | [LATER] |
+| 24 h soak test per release | [V1] |
+
+---
+
+## 100. Build order
+
+Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks can be inserted later (P10.15). Every task has the phase's status unless marked otherwise. Each phase ends with its **Done when** check.
+
+### V1: shadow mode (P10–P90) [V1]
+
+#### P10 Foundations (M10, M20)
+- **P10.10** Create the Git repo as a mono-repo: `/service`, `/hmi`, `/common`, `/tools`, `/firmware` (empty), `/docs`. Add branching strategy, `.gitignore`, `.clang-format` and `.clang-tidy`.
+- **P10.20** Set up a CMake superbuild with presets (debug, release), and a vcpkg manifest for Qt 6, OpenCV, cppzmq, spdlog, nlohmann-json, SQLite and GoogleTest.
+- **P10.30** Set up the CI pipeline: build, unit tests, clang-tidy, and store build artifacts.
+- **P10.40** Build the common library: base types (Timestamp, FrameId, ObjectId), error handling (`std::expected`), and logging (spdlog, rotating files).
+- **P10.50** Build the message bus: typed publish/subscribe, bounded lock-free queues, drop counters.
+- **P10.60** Build the module framework: `IModule` (init/start/stop/health), module registry, startup and shutdown order.
+- **P10.70** Build the service executable: CLI arguments, signal handling, graceful shutdown.
+- **P10.80** Build the config store: JSON schema per module, load/validate/save, versioning (ConfigVersion), and the MSG-20-01 change notification.
+- **P10.90** Set up unit tests for the bus and config store, and add them to CI.
+
+**Done when:** the service starts and stops cleanly, loads and validates config, and CI is green.
+
+#### P20 Acquisition (M30)
+- **P20.10** Define the `ICamera` interface: open/close, settings (exposure, gain, ROI, trigger mode), start/stop, frame callback, frame metadata.
+- **P20.20** Build a frame buffer pool: preallocated and ref-counted, so frames can later go to shared memory without copying.
+- **P20.30** Build the Daheng adapter (M30.10): discovery, open by serial number, hardware trigger on Line0, frame ID and timestamp from the SDK.
+- **P20.40** Tune GigE: jumbo frames, packet delay, NIC receive buffers. Write the PC setup checklist.
+- **P20.50** Add camera health handling: auto-reconnect, error counters, frame-ID gap detection.
+- **P20.60** Build the recorder (M30.30): raw frames plus metadata, one folder per session.
+- **P20.70** Build the replay camera (M30.20): plays recordings through `ICamera` at original or adjustable rate, with loop support.
+- **P20.80** Add camera mapping in config: serial number → logical camera ID.
+- **P20.90** Build a CLI record tool and record initial datasets on the existing machine.
+
+**Done when:** all cameras grab on the external trigger without drops at target rate, and datasets are recorded.
+
+#### P30 HMI shell + live view (M100, G30)
+- **P30.10** Design the IPC: a shared-memory ring buffer per camera for preview frames, ZeroMQ for commands and events, and a serialization format (FlatBuffers or Protobuf).
+- **P30.20** Build the service-side IPC server: preview downscaler (configurable fps and resolution) and command handler.
+- **P30.30** Build the HMI skeleton: Qt Quick app, navigation bar, `IPage` plugin loader.
+- **P30.40** Build the design system: colours, typography, standard QML components (buttons, numeric inputs, tables, dialogs).
+- **P30.50** Build the video item: a custom `QQuickItem` that renders frames as GPU textures.
+- **P30.60** Build G30.10 Live view: grid of all cameras, single-camera fullscreen, freeze/unfreeze per camera and for all cameras.
+- **P30.70** Build the overlay layer: ROIs, lane lines and detections drawn over the video.
+- **P30.80** Build G30.20 ROI editor and G30.30 camera settings: draw, move and resize ROIs, numeric entry, save to config.
+- **P30.90** Add connection handling: HMI auto-reconnect and a "service offline" state.
+
+**Done when:** live view of all cameras is smooth, and a GUI crash or restart does not affect the service.
+
+#### P40 Object tracking (M50.10, G50) [V1][REDO]
+- **P40.10** Define the `ITracker` interface and the ObjectRecord message (MSG-50-01).
+- **P40.20** Split lane ROIs: frame → per-lane crops.
+- **P40.30** Build the frame-sequence tracker: frame count → object sequence number and photo index (photos per object, pitch).
+- **P40.40** Add gap detection: frame-ID or timestamp gaps mark affected objects as "untracked".
+- **P40.50** Add image-based resync: detect the cup or roller edge and correct the phase.
+- **P40.60** Build the G50 Tracking page: settings plus a live overlay of object IDs on the images.
+- **P40.70** Test with replay datasets, including artificially dropped frames.
+
+**Done when:** replayed sets map to the correct objects and dropped frames are flagged.
+
+#### P50 Machine configuration (M20, G20) [PARTIAL]
+- **P50.10** Define the machine model schema: machine → lines → lanes → cameras → tippers (logical).
+- **P50.20** Add validation rules: unique IDs, every lane has a camera, no orphan ROIs.
+- **P50.30** Define the recipe model (sorting specs + analytics + tracking parameters), versioned.
+- **P50.40** Build the G20.10 lines and lanes editor.
+- **P50.50** Build the G20.20 camera ↔ lane assignment.
+- **P50.60** Build G20.30 Tippers: logical list only, no timing. [PARTIAL]
+- **P50.70** Build the G20.40 recipe manager: create, copy, activate, compare versions, roll back.
+- **P50.80** Add config import/export to file, for backup.
+
+**Done when:** the full machine is described in the GUI and every change is versioned.
+
+#### P60 Analytics (M60, G60)
+- **P60.10** Define `IAnalysisStage` and the pipeline runner (thread pool per camera, timing per stage).
+- **P60.20** Store the pipeline definition in the recipe: ordered stages plus parameters.
+- **P60.30** Build the preprocessing stage: colour conversion, illumination normalisation.
+- **P60.40** Build the segmentation stage: egg mask per lane ROI.
+- **P60.50** Build G30.40 calibration: px→mm from a calibration target, scale per camera.
+- **P60.60** Build the size stage: area, major/minor axis in mm.
+- **P60.70** Build the dirt % stage: dirt pixel ratio on the shell mask.
+- **P60.80** Add multi-photo aggregation: combine measurements per object (max, mean, worst-case rules).
+- **P60.90** Build the G60 pages: stage list, parameters with live preview, debug overlay per stage.
+- **P60.95** Build the ONNX Runtime stage skeleton for future ML models. [PARTIAL]
+
+**Done when:** measurements appear per object, stages can be swapped, and latency is within budget.
+
+#### P70 Grading (M70, G70)
+- **P70.10** Define the grade model: grades/classes with priority order.
+- **P70.20** Build the rule engine: conditions on measurements (ranges, thresholds, AND/OR).
+- **P70.30** Produce a decision per object (MSG-70-01) with rule hits, including "untracked" handling.
+- **P70.40** Build the G70.10 grades editor and G70.20 rules editor.
+- **P70.50** Build G70.30 Shadow decisions: live list with image and grade per object.
+- **P70.60** Build a validation tool: decisions vs manual labels (confusion matrix).
+
+**Done when:** every object gets a grade, and accuracy against manual checks is measured.
+
+#### P80 Data & statistics (M80, G80)
+- **P80.10** Define `IStorage` and the SQLite implementation (schema per section 80).
+- **P80.20** Build an async batched writer that never blocks the pipeline.
+- **P80.30** Build the image archive: rejects plus sampling rule, folder structure, file references in the database.
+- **P80.40** Add batch management: start/stop a batch, linked to the recipe version.
+- **P80.50** Add statistics aggregation: counts per grade, lane and time window.
+- **P80.60** Build G80.10 Live batch stats and G80.20 History.
+- **P80.70** Build the G80.30 image browser: filter by batch, grade or lane, with measurements.
+- **P80.80** Add CSV export. [PARTIAL]
+- **P80.90** Add a disk-space guard and basic cleanup. [PARTIAL]
+
+**Done when:** a batch report and history are generated from stored data.
+
+#### P90 Diagnostics & hardening (M90, M100.20, M130, G90, G100, G130) [PARTIAL]
+- **P90.10** Define `IDiagnosticsSource`; collect metrics for fps, drops, queue levels and latency per stage.
+- **P90.20** Build G90.10 and G90.20: live graphs of the metrics.
+- **P90.30** Add service machine states (idle/running/fault) and G130.10. [PARTIAL]
+- **P90.40** Add basic users and roles (operator, engineer, admin) in G100.10. [PARTIAL]
+- **P90.50** Build G100.20 log viewer and G100.30 version info.
+- **P90.60** Run as a systemd service with auto-restart; start the HMI in kiosk mode.
+- **P90.70** Tune performance: thread pinning, CPU governor, NIC interrupt affinity.
+- **P90.80** Run a 24 h soak test (replay at 1.5× speed) plus a live run on the machine.
+- **P90.90** Write the installation/update procedure (packages) and V1 release notes.
+
+**Done when:** a 24 h run completes without drops or leaks at target speed. **V1 release.**
+
+### Controller & live sorting (P100–P190) [LATER]
+
+#### P100 Protocol spec (M45)
+- **P100.10** Define all messages (section 50.10): field layout, sizes, endianness.
+- **P100.20** Define sequence numbers, ack/retry and protocol versioning.
+- **P100.30** Write the timing budget: travel time vs processing and network latency.
+- **P100.40** Build a shared C99 encode/decode library for both PC and firmware.
+- **P100.50** Upgrade the simulator (M40.20) to speak M45 over UDP loopback.
+- **P100.60** Add protocol unit tests and fuzzing.
+
+**Done when:** the spec is frozen and the simulator passes all protocol tests.
+
+#### P110 Controller hardware & firmware (C10–C110)
+- **P110.10** Close the open points in the PCB spec (section 190).
+- **P110.20** Do schematic and layout in Flux, then a design review.
+- **P110.30** Build prototypes and bring them up: power, clocks, Ethernet.
+- **P110.40** Implement encoder counting (C10).
+- **P110.50** Build the compare-match output engine and pulse-end scheduler (C20, C40, C50).
+- **P110.60** Implement the trigger log (C30) and event stream (C80).
+- **P110.70** Implement the IO mapping table (C60) and watchdog/safe state (C70).
+- **P110.80** Implement the protocol handler (C90) and bootloader (C100).
+- **P110.90** Bench test: measure output accuracy with a scope at maximum encoder rate.
+
+**Done when:** outputs fire within spec (≤ 1 count + 2 µs) on the bench.
+
+#### P120 Controller adapter (M40.30, G40)
+- **P120.10** Build the `IController` implementation over M45.
+- **P120.20** Add the capabilities handshake, which enables the matching GUI features.
+- **P120.30** Push config on connect and on change; full resync after reconnect.
+- **P120.40** Build G40.10 Status and G40.30 Connection/firmware update.
+- **P120.50** Build the G40.20 IO mapping editor.
+- **P120.60** Add heartbeat and safe-state policy settings.
+
+**Done when:** the controller is fully configured from the GUI and survives reconnects.
+
+#### P130 Encoder tracking (M50.20, G50, G120.10) [REDO of P40]
+- **P130.10** Build the encoder tracker: trigger log + frame ID → encoder count per photo.
+- **P130.20** Derive the object index from encoder count and pitch.
+- **P130.30** Extend the ObjectRecord message and DB schema with encoder position (migration).
+- **P130.40** Rework G50: all settings in encoder counts.
+- **P130.50** Build the G120.10 encoder ↔ photo calibration wizard.
+- **P130.60** Run M50.10 and M50.20 side by side, compare, then retire M50.10.
+
+**Done when:** objects are tracked by encoder with zero drift over a 24 h run.
+
+#### P140 Triggers & lights (M30.40, M110, G110)
+- **P140.10** Build the trigger plan generator from photos per object and pitch.
+- **P140.20** Switch the cameras to triggers from the own controller.
+- **P140.30** Add strobe timing and intensity (M110) and the G110 pages.
+- **P140.40** Verify exposure/strobe alignment in diagnostics.
+
+**Done when:** cameras and lights are fully driven by the own controller.
+
+#### P150 Ejection (M70.20, M75, G70.40, G120.20–30)
+- **P150.10** Build G70.40 grade → outlet/tipper mapping.
+- **P150.20** Build the eject planner: `eject_at_count`, pulse, deadline check.
+- **P150.30** Build the G120.20 tipper offset calibration (test objects or marker pattern).
+- **P150.40** Build the G120.30 tipper test/jog mode (engineer role only).
+- **P150.50** Add late-command handling and reporting.
+- **P150.60** Test at increasing speeds and measure the hit rate per tipper.
+
+**Done when:** hit rate meets target at full speed.
+
+#### P160 Controller diagnostics (M90.20, G90.30)
+- **P160.10** Ingest the event stream into diagnostics.
+- **P160.20** Build the G90.30 timeline/scope view: encoder, triggers, strobes, ejects, inputs.
+- **P160.30** Record event traces for offline analysis.
+
+**Done when:** every IO edge is visible on a timeline.
+
+#### P170 Live commissioning (M130, G130.20)
+- **P170.10** Build the G130.20 safe-state policy settings.
+- **P170.20** Add a shadow vs live comparison mode.
+- **P170.30** Write operator and engineer documentation, and train users.
+- **P170.40** Run the acceptance test and sign off.
+
+**Done when:** live sorting is signed off.
+
+#### P180 Scaling (M80.30) [LATER][REDO storage]
+- **P180.10** Implement `IStorage` on PostgreSQL/TimescaleDB.
+- **P180.20** Build a migration tool from SQLite to PostgreSQL.
+- **P180.30** Support multiple lines: several services under one HMI.
+- **P180.40** Load test at maximum line count.
+
+**Done when:** multiple lines run with central storage.
+
+#### P190 Reserved
+
+### Extensions (P200+) [LATER]
+- **P200** Extended analytics: cracks, shape, colour, ML models (M60.20, M60.30).
+- **P210** External integration: MES/ERP export, remote support (M140).
+- **P220** Reserved.
+
+---
+
+
+## 110. Items that need rework for the final version
+
+| Item | Why | Replaced by |
+|---|---|---|
+| M50.10 Frame-sequence tracker | No absolute position | M50.20 Encoder tracker (P130) |
+| G50 Tracking page | Settings in frames instead of encoder counts | Reworked in P130 |
+| MSG-50-01 ObjectRecord | Lacks encoder position | Extended in P130 (versioned) |
+| Object table (DB) | Lacks encoder position | Schema migration in P130 |
+| SQLite storage | Single-line, limited concurrency | PostgreSQL behind `IStorage` (P180) |
+| G40 Controller page | Status only | Full page in P120 |
+
+Everything else is built once and only extended.
+
+---
+
+## 120. Open points
+
+| # | Question | Needed by |
+|---|---|---|
+| 1 | Number of lanes, cameras per lane, photos per egg | P20 |
+| 2 | Target throughput (eggs/s per lane) and camera-to-tipper distance | P20 / P100 |
+| 3 | Does each trigger reliably increment the Daheng frame ID? Verify on site | P40 |
+| 4 | First sorting specs: which grades and thresholds (size, dirt %) | P70 |
+| 5 | Own controller: PLC (Beckhoff/Siemens) or self-built PCB | P110 |
+| 6 | Data retention: which images to keep and for how long | P80 |
