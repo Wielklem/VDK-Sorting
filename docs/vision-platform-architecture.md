@@ -32,6 +32,10 @@ Markers can be combined, e.g. **[V1][REDO]**.
 - The vision PC and GUI own all configuration: IO mapping, trigger, light and eject timing, encoder relations, machine layout, sorting specs.
 - Ejection is encoder-position-based with µs-level output accuracy.
 
+### 10.30 Platforms
+- **Target:** Ubuntu LTS (24.04), x64. All releases are built, tested and shipped for Ubuntu.
+- **Prepared:** Windows 10/11 x64. The code base is kept Windows-ready from day one, so a Windows release only needs the platform layer implementation (M15.20), an installer and on-site testing (P220). No changes to service or HMI logic.
+
 ---
 
 ## 20. Numbering convention
@@ -84,17 +88,19 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 ### 30.10 Principles
 1. **The PC decides, the controller acts.** The PC never fires outputs directly. Timing accuracy comes from controller hardware timers.
 2. **The service and the HMI are separate processes.** A GUI crash never stops processing.
-3. **Every hardware dependency sits behind an interface:** `ICamera`, `IController`, `ITracker`, `IStorage`.
+3. **Every hardware and OS dependency sits behind an interface:** `ICamera`, `IController`, `ITracker`, `IStorage`, and the platform interfaces of M15.
 4. **Capabilities drive the GUI.** Features the active controller can't support are shown read-only or disabled, never removed.
 5. **Modules communicate only via the message bus**, never through direct calls.
 6. **All configuration lives on the PC**, versioned, and is pushed to the controller on connect and on change.
+7. **Portable code only, outside M15.** No POSIX or Win32 calls outside the platform layer. Use `std::filesystem` for paths, no hardcoded system paths, UTF-8 strings, and fixed-size integer types with defined endianness in messages and files.
 
 ### 30.20 Tech stack
 | Layer | Choice | Status |
 |---|---|---|
-| Language | C++20 (Python only for offline tools and training) | [V1] |
-| Build | CMake + vcpkg, CI | [V1] |
-| OS | Ubuntu LTS (Windows possible) | [V1] |
+| Language | C++23 (Python only for offline tools and training) | [V1] |
+| Build | CMake presets + vcpkg; CI builds on Ubuntu and Windows | [V1] |
+| Compiler | GCC 13 (Ubuntu); MSVC 2022 (Windows, CI only in V1) | [V1] |
+| OS | Ubuntu LTS 24.04 (target); Windows 10/11 x64 (prepared) | [V1] / Windows [LATER] |
 | GUI | Qt 6 LTS, Qt Quick/QML, GPU texture live view | [V1] |
 | IPC | Shared memory (frames) + ZeroMQ (messages) | [V1] |
 | Cameras | Daheng Galaxy C++ SDK (GenICam) | [V1] |
@@ -102,6 +108,9 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | Inference | ONNX Runtime / TensorRT | [PARTIAL] |
 | Storage | SQLite + image folders | [V1][REDO] → PostgreSQL/TimescaleDB for multi-line |
 | Controller link | UDP, binary protocol (M45) | [LATER] |
+| Linking | Dynamic: vcpkg `x64-linux-dynamic` / `x64-windows`; required for Qt LGPL | [V1] |
+| Packaging | Ubuntu: CPack `.deb` (service + HMI + bundled libs, RPATH `$ORIGIN/../lib`) | [V1] |
+| Packaging | Windows: installer (WiX/NSIS), Windows service instead of systemd | [LATER] |
 
 ---
 
@@ -110,6 +119,9 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | ID | Module | Responsibility | Interface | Status |
 |---|---|---|---|---|
 | M10 | Core service | Lifecycle, threads, logging, message bus, watchdog | `IModule`, `MessageBus` | [V1] |
+| M15 | Platform layer | All OS-specific code: shared memory, service hosting and stop signals, thread priority/affinity, standard paths (config, data, logs) | `ISharedMemory`, `IServiceHost`, `IThreadTuning`, `IPaths` | [V1] |
+| M15.10 | Linux implementation | POSIX shm, systemd, SIGTERM/SIGINT, pthread affinity, `/etc`, `/var/lib` paths | M15 interfaces | [V1] |
+| M15.20 | Windows implementation | File mapping, Windows Service, console/service stop, affinity mask, `%ProgramData%` paths | M15 interfaces | [LATER] |
 | M20 | Config & recipes | Machine config, recipes, versioning, validation, schema migration | `IConfigStore` | [V1] |
 | M30 | Camera acquisition | Discovery, settings, grabbing, frame IDs, timestamps | `ICamera` | [V1] |
 | M30.10 | Daheng adapter | Galaxy SDK implementation | `ICamera` | [V1] |
@@ -260,13 +272,14 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 ### V1: shadow mode (P10–P90) [V1]
 
 #### P10 Foundations (M10, M20)
-- **P10.10  [DONE]** Create the Git repo as a mono-repo: `/service`, `/hmi`, `/common`, `/tools`, `/firmware` (empty), `/docs`. Add branching strategy, `.gitignore`, `.clang-format` and `.clang-tidy`.
-- **P10.20** Set up a CMake superbuild with presets (debug, release), and a vcpkg manifest for Qt 6, OpenCV, cppzmq, spdlog, nlohmann-json, SQLite and GoogleTest.
-- **P10.30** Set up the CI pipeline: build, unit tests, clang-tidy, and store build artifacts.
+- **P10.10 [DONE]** Create the Git repo as a mono-repo: `/service`, `/hmi`, `/common`, `/tools`, `/firmware` (empty), `/docs`. Add branching strategy, `.gitignore`, `.clang-format` and `.clang-tidy`.
+- **P10.20 [DONE]** Set up a CMake superbuild with presets (debug, release) for Linux and Windows, and a vcpkg manifest for Qt 6, OpenCV, cppzmq, spdlog, nlohmann-json, SQLite and GoogleTest.
+- **P10.30** Set up the CI pipeline: build and unit tests on Ubuntu and Windows, clang-tidy on Ubuntu, and store build artifacts. A broken Windows build blocks the merge.
 - **P10.40** Build the common library: base types (Timestamp, FrameId, ObjectId), error handling (`std::expected`), and logging (spdlog, rotating files).
+- **P10.45** Build the platform layer (M15): interfaces plus the Linux implementation (M15.10). On Windows, stubs that compile and return "not supported", so CI stays green.
 - **P10.50** Build the message bus: typed publish/subscribe, bounded lock-free queues, drop counters.
 - **P10.60** Build the module framework: `IModule` (init/start/stop/health), module registry, startup and shutdown order.
-- **P10.70** Build the service executable: CLI arguments, signal handling, graceful shutdown.
+- **P10.70** Build the service executable: CLI arguments, stop signals via `IServiceHost` (M15), graceful shutdown.
 - **P10.80** Build the config store: JSON schema per module, load/validate/save, versioning (ConfigVersion), and the MSG-20-01 change notification.
 - **P10.90** Set up unit tests for the bus and config store, and add them to CI.
 
@@ -276,7 +289,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P20.10** Define the `ICamera` interface: open/close, settings (exposure, gain, ROI, trigger mode), start/stop, frame callback, frame metadata.
 - **P20.20** Build a frame buffer pool: preallocated and ref-counted, so frames can later go to shared memory without copying.
 - **P20.30** Build the Daheng adapter (M30.10): discovery, open by serial number, hardware trigger on Line0, frame ID and timestamp from the SDK.
-- **P20.40** Tune GigE: jumbo frames, packet delay, NIC receive buffers. Write the PC setup checklist.
+- **P20.40** Tune GigE: jumbo frames, packet delay, NIC receive buffers. Write the Ubuntu PC setup checklist.
 - **P20.50** Add camera health handling: auto-reconnect, error counters, frame-ID gap detection.
 - **P20.60** Build the recorder (M30.30): raw frames plus metadata, one folder per session.
 - **P20.70** Build the replay camera (M30.20): plays recordings through `ICamera` at original or adjustable rate, with loop support.
@@ -286,7 +299,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 **Done when:** all cameras grab on the external trigger without drops at target rate, and datasets are recorded.
 
 #### P30 HMI shell + live view (M100, G30)
-- **P30.10** Design the IPC: a shared-memory ring buffer per camera for preview frames, ZeroMQ for commands and events, and a serialization format (FlatBuffers or Protobuf).
+- **P30.10** Design the IPC: a shared-memory ring buffer per camera for preview frames (via `ISharedMemory`, M15), ZeroMQ for commands and events, and a serialization format (FlatBuffers or Protobuf).
 - **P30.20** Build the service-side IPC server: preview downscaler (configurable fps and resolution) and command handler.
 - **P30.30** Build the HMI skeleton: Qt Quick app, navigation bar, `IPage` plugin loader.
 - **P30.40** Build the design system: colours, typography, standard QML components (buttons, numeric inputs, tables, dialogs).
@@ -364,10 +377,11 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P90.30** Add service machine states (idle/running/fault) and G130.10. [PARTIAL]
 - **P90.40** Add basic users and roles (operator, engineer, admin) in G100.10. [PARTIAL]
 - **P90.50** Build G100.20 log viewer and G100.30 version info.
-- **P90.60** Run as a systemd service with auto-restart; start the HMI in kiosk mode.
-- **P90.70** Tune performance: thread pinning, CPU governor, NIC interrupt affinity.
+- **P90.60** Run as a systemd service with auto-restart (via `IServiceHost`); start the HMI in kiosk mode.
+- **P90.70** Tune performance: thread pinning via `IThreadTuning`, CPU governor, NIC interrupt affinity.
 - **P90.80** Run a 24 h soak test (replay at 1.5× speed) plus a live run on the machine.
-- **P90.90** Write the installation/update procedure (packages) and V1 release notes.
+- **P90.85** Build the `.deb` package with CPack: binaries, bundled vcpkg libs and Qt plugins/QML, systemd unit, kiosk autostart. Daheng SDK is a documented prerequisite, not bundled.
+- **P90.90** Write the installation/update procedure (target PC requirements, install, update, rollback) and V1 release notes.
 
 **Done when:** a 24 h run completes without drops or leaks at target speed. **V1 release.**
 
@@ -462,7 +476,14 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 ### Extensions (P200+) [LATER]
 - **P200** Extended analytics: cracks, shape, colour, ML models (M60.20, M60.30).
 - **P210** External integration: MES/ERP export, remote support (M140).
-- **P220** Reserved.
+- **P220** Windows release [LATER], started when the customer requires it:
+  - **P220.10** Implement M15.20 (Windows platform layer).
+  - **P220.20** Run the service as a Windows Service; set up HMI kiosk/autostart on Windows.
+  - **P220.30** Build the installer (WiX or NSIS) with bundled Qt/vcpkg libs; the Daheng SDK is a documented prerequisite.
+  - **P220.40** Write the Windows PC setup checklist: GigE NIC tuning, Daheng driver, power settings.
+  - **P220.50** Run the 24 h soak test plus a live run on the Windows target machine.
+  - **Done when:** the Windows build passes the same acceptance as the Ubuntu V1 release.
+- **P230** Reserved.
 
 ---
 
@@ -492,3 +513,4 @@ Everything else is built once and only extended.
 | 4 | First sorting specs: which grades and thresholds (size, dirt %) | P70 |
 | 5 | Own controller: PLC (Beckhoff/Siemens) or self-built PCB | P110 |
 | 6 | Data retention: which images to keep and for how long | P80 |
+| 7 | Will the customer require Windows, and from which release? | P220 |

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "vdk-sorting",
+  "version": "0.1.0",
+  "dependencies": [
+    "spdlog",
+    "nlohmann-json",
+    "cppzmq",
+    "sqlite3",
+    {
+      "name": "opencv4",
+      "default-features": false,
+      "features": [
+        "jpeg",
+        "png"
+      ]
+    }
+  ],
+  "features": {
+    "hmi": {
+      "description": "Qt 6 QML HMI",
+      "dependencies": [
+        "qtbase",
+        "qtdeclarative"
+      ]
+    },
+    "tests": {
+      "description": "Unit tests",
+      "dependencies": [
+        "gtest"
+      ]
+    }
+  },
+  "builtin-baseline": "f05ff9f0adbd630c4fada9072b4a68eeeb7d738a"
+}
