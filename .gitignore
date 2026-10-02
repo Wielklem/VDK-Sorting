@@ -1,0 +1,62 @@
+# --- Build ---
+build/
+out/
+cmake-build-*/
+CMakeUserPresets.json
+compile_commands.json
+vcpkg_installed/
+*.o
+*.a
+*.so
+*.so.*
+
+# --- IDE / tooling ---
+.cache/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.user
+*.user.*
+.qtcreator/
+*.swp
+
+# --- Qt ---
+*.qmlc
+*.jsc
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# --- Python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# --- Runtime data (never in git) ---
+/data/
+/recordings/
+/datasets/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# --- ML models (store outside git or use LFS) ---
+*.onnx
+*.engine
+*.pt
+
+# --- Firmware ---
+firmware/**/Debug/
+firmware/**/Release/
+*.elf
+*.bin
+*.hex
+*.map
+
+# --- OS ---
+.DS_Store
+Thumbs.db
