@@ -260,7 +260,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 ### V1: shadow mode (P10–P90) [V1]
 
 #### P10 Foundations (M10, M20)
-- **P10.10** Create the Git repo as a mono-repo: `/service`, `/hmi`, `/common`, `/tools`, `/firmware` (empty), `/docs`. Add branching strategy, `.gitignore`, `.clang-format` and `.clang-tidy`.
+- **P10.10  [DONE]** Create the Git repo as a mono-repo: `/service`, `/hmi`, `/common`, `/tools`, `/firmware` (empty), `/docs`. Add branching strategy, `.gitignore`, `.clang-format` and `.clang-tidy`.
 - **P10.20** Set up a CMake superbuild with presets (debug, release), and a vcpkg manifest for Qt 6, OpenCV, cppzmq, spdlog, nlohmann-json, SQLite and GoogleTest.
 - **P10.30** Set up the CI pipeline: build, unit tests, clang-tidy, and store build artifacts.
 - **P10.40** Build the common library: base types (Timestamp, FrameId, ObjectId), error handling (`std::expected`), and logging (spdlog, rotating files).
