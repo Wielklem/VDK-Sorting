@@ -22,6 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h /
+
       - name: Install system packages
         run: |
           sudo apt-get update
@@ -53,12 +60,13 @@ jobs:
         run: echo "VCPKG_CACHE_BEFORE=$(find "$RUNNER_TEMP/vcpkg-cache" -type f | wc -l)" >> "$GITHUB_ENV"
 
       - name: Configure
-        run: cmake --preset linux-release
+        run: cmake --preset linux-release -DVCPKG_INSTALL_OPTIONS=--clean-after-build
 
       - name: Check vcpkg cache change
         id: cachedelta
         if: always()
         run: |
+          df -h /
           after=$(find "$RUNNER_TEMP/vcpkg-cache" -type f | wc -l)
           echo "changed=$([ "$after" != "$VCPKG_CACHE_BEFORE" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
@@ -142,7 +150,7 @@ jobs:
           "VCPKG_CACHE_BEFORE=$n" >> $env:GITHUB_ENV
 
       - name: Configure
-        run: cmake --preset windows-release
+        run: cmake --preset windows-release -DVCPKG_INSTALL_OPTIONS=--clean-after-build
 
       - name: Check vcpkg cache change
         id: cachedelta
