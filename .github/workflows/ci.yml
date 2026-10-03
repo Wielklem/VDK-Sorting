@@ -1,0 +1,182 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ninja-build pkg-config curl zip unzip tar \
+            autoconf autoconf-archive automake libtool bison flex python3 python3-venv linux-libc-dev \
+            libx11-dev libx11-xcb-dev libxext-dev libxfixes-dev libxi-dev \
+            libxrender-dev libxkbcommon-dev libxkbcommon-x11-dev '^libxcb.*-dev' \
+            libgl-dev libegl-dev libglu1-mesa-dev clang-tidy-18
+
+      - name: Set up vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
+          "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          mkdir -p "$RUNNER_TEMP/vcpkg-cache"
+          echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
+          echo "VCPKG_BINARY_SOURCES=clear;files,$RUNNER_TEMP/vcpkg-cache,readwrite" >> "$GITHUB_ENV"
+
+      - name: Restore vcpkg cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/vcpkg-cache
+          key: vcpkg-linux-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-linux-${{ hashFiles('vcpkg.json') }}-
+            vcpkg-linux-
+
+      - name: Count cached packages
+        run: echo "VCPKG_CACHE_BEFORE=$(find "$RUNNER_TEMP/vcpkg-cache" -type f | wc -l)" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: cmake --preset linux-release
+
+      - name: Check vcpkg cache change
+        id: cachedelta
+        if: always()
+        run: |
+          after=$(find "$RUNNER_TEMP/vcpkg-cache" -type f | wc -l)
+          echo "changed=$([ "$after" != "$VCPKG_CACHE_BEFORE" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Save vcpkg cache
+        if: always() && steps.cachedelta.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/vcpkg-cache
+          key: vcpkg-linux-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
+
+      - name: Build
+        run: cmake --build --preset linux-release
+
+      - name: Test
+        run: ctest --preset linux-release --output-junit "$GITHUB_WORKSPACE/test-results-linux.xml"
+
+      - name: clang-tidy
+        run: |
+          run-clang-tidy-18 -p build/linux-release -quiet \
+            -extra-arg=-Wno-unknown-warning-option \
+            "^$GITHUB_WORKSPACE/(common|service|hmi|tools)/" 2>&1 | tee clang-tidy.log
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-reports
+          path: |
+            test-results-linux.xml
+            clang-tidy.log
+          if-no-files-found: ignore
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binaries
+          retention-days: 14
+          path: |
+            build/linux-release/service/vsort_service
+            build/linux-release/hmi/vsort_hmi
+
+  windows:
+    name: windows
+    runs-on: windows-2022
+    timeout-minutes: 360
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Enable long paths
+        run: git config --global core.longpaths true
+
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Set up vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:/v
+          C:/v/bootstrap-vcpkg.bat -disableMetrics
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/vcpkg-cache" | Out-Null
+          "VCPKG_ROOT=C:/v" >> $env:GITHUB_ENV
+          "VCPKG_BINARY_SOURCES=clear;files,$env:RUNNER_TEMP/vcpkg-cache,readwrite" >> $env:GITHUB_ENV
+
+      - name: Restore vcpkg cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/vcpkg-cache
+          key: vcpkg-windows-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-windows-${{ hashFiles('vcpkg.json') }}-
+            vcpkg-windows-
+
+      - name: Count cached packages
+        run: |
+          $n = (Get-ChildItem -Recurse -File "$env:RUNNER_TEMP/vcpkg-cache").Count
+          "VCPKG_CACHE_BEFORE=$n" >> $env:GITHUB_ENV
+
+      - name: Configure
+        run: cmake --preset windows-release
+
+      - name: Check vcpkg cache change
+        id: cachedelta
+        if: always()
+        run: |
+          $n = (Get-ChildItem -Recurse -File "$env:RUNNER_TEMP/vcpkg-cache").Count
+          "changed=$(($n -ne [int]$env:VCPKG_CACHE_BEFORE).ToString().ToLower())" >> $env:GITHUB_OUTPUT
+
+      - name: Save vcpkg cache
+        if: always() && steps.cachedelta.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/vcpkg-cache
+          key: vcpkg-windows-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
+
+      - name: Build
+        run: cmake --build --preset windows-release
+
+      - name: Test
+        run: ctest --preset windows-release --output-junit "$env:GITHUB_WORKSPACE/test-results-windows.xml"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-reports
+          path: test-results-windows.xml
+          if-no-files-found: ignore
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binaries
+          retention-days: 14
+          path: |
+            build/windows-release/**/*.exe
+            build/windows-release/**/*.dll
+            !build/windows-release/vcpkg_installed/**
