@@ -21,6 +21,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      - name: Portability check (rule 1)
+        run: tools/check_portability.sh
 
       - name: Free disk space
         run: |
@@ -28,7 +30,6 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           sudo docker image prune --all --force
           df -h /
-
       - name: Install system packages
         run: |
           sudo apt-get update
@@ -89,7 +90,7 @@ jobs:
 
       - name: clang-tidy
         run: |
-          run-clang-tidy-19 -p build/linux-release -quiet \
+          run-clang-tidy-19 -clang-tidy-binary clang-tidy-19 -p build/linux-release -quiet \
             -extra-arg=-Wno-unknown-warning-option \
             "^$GITHUB_WORKSPACE/(common|service|hmi|tools)/" 2>&1 | tee clang-tidy.log
 
