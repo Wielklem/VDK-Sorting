@@ -60,7 +60,11 @@ jobs:
         run: echo "VCPKG_CACHE_BEFORE=$(find "$RUNNER_TEMP/vcpkg-cache" -type f | wc -l)" >> "$GITHUB_ENV"
 
       - name: Configure
-        run: cmake --preset linux-release -DVCPKG_INSTALL_OPTIONS=--clean-after-build
+        run: cmake --preset linux-release -DVCPKG_INSTALL_OPTIONS=--clean-after-build        run: |
+          cmake --preset linux-release -DVCPKG_INSTALL_OPTIONS=--clean-after-build \
+            -DVCPKG_OVERLAY_TRIPLETS="$GITHUB_WORKSPACE/triplets" \
+            -DVCPKG_TARGET_TRIPLET=x64-linux-dynamic-release \
+            -DVCPKG_HOST_TRIPLET=x64-linux-release
 
       - name: Check vcpkg cache change
         id: cachedelta
@@ -150,7 +154,7 @@ jobs:
           "VCPKG_CACHE_BEFORE=$n" >> $env:GITHUB_ENV
 
       - name: Configure
-        run: cmake --preset windows-release -DVCPKG_INSTALL_OPTIONS=--clean-after-build
+        run: cmake --preset windows-release -DVCPKG_INSTALL_OPTIONS=--clean-after-build -DVCPKG_TARGET_TRIPLET=x64-windows-release -DVCPKG_HOST_TRIPLET=x64-windows-release
 
       - name: Check vcpkg cache change
         id: cachedelta
