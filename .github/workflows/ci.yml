@@ -37,7 +37,7 @@ jobs:
             libx11-dev libx11-xcb-dev libxext-dev libxfixes-dev libxi-dev \
             libsm-dev libice-dev libxtst-dev libxrandr-dev \
             libxrender-dev libxkbcommon-dev libxkbcommon-x11-dev '^libxcb.*-dev' \
-            libgl-dev libegl-dev libglu1-mesa-dev clang-tidy-18
+            libgl-dev libegl-dev libglu1-mesa-dev clang-tidy-19
 
       - name: Set up vcpkg
         run: |
@@ -89,7 +89,7 @@ jobs:
 
       - name: clang-tidy
         run: |
-          run-clang-tidy-18 -p build/linux-release -quiet \
+          run-clang-tidy-19 -p build/linux-release -quiet \
             -extra-arg=-Wno-unknown-warning-option \
             "^$GITHUB_WORKSPACE/(common|service|hmi|tools)/" 2>&1 | tee clang-tidy.log
 
