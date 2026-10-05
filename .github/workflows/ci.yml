@@ -51,16 +51,16 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/vcpkg-cache
-          key: vcpkg-linux-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
+          key: vcpkg-linux-${{ hashFiles('vcpkg.json', 'triplets/**') }}-${{ github.run_id }}
           restore-keys: |
-            vcpkg-linux-${{ hashFiles('vcpkg.json') }}-
+            vcpkg-linux-${{ hashFiles('vcpkg.json', 'triplets/**') }}-
             vcpkg-linux-
 
       - name: Count cached packages
         run: echo "VCPKG_CACHE_BEFORE=$(find "$RUNNER_TEMP/vcpkg-cache" -type f | wc -l)" >> "$GITHUB_ENV"
 
       - name: Configure
-        run: cmake --preset linux-release -DVCPKG_INSTALL_OPTIONS=--clean-after-build        run: |
+        run: |
           cmake --preset linux-release -DVCPKG_INSTALL_OPTIONS=--clean-after-build \
             -DVCPKG_OVERLAY_TRIPLETS="$GITHUB_WORKSPACE/triplets" \
             -DVCPKG_TARGET_TRIPLET=x64-linux-dynamic-release \
@@ -79,7 +79,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/vcpkg-cache
-          key: vcpkg-linux-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
+          key: vcpkg-linux-${{ hashFiles('vcpkg.json', 'triplets/**') }}-${{ github.run_id }}
 
       - name: Build
         run: cmake --build --preset linux-release
