@@ -16,6 +16,7 @@ find_package(Threads REQUIRED)
 add_library(vsort_camera_daheng STATIC
   src/galaxy_lib.cpp
   src/daheng_discovery.cpp
+  src/daheng_gige_config.cpp
   src/daheng_camera.cpp)
 add_library(vsort::camera_daheng ALIAS vsort_camera_daheng)
 

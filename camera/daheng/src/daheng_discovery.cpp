@@ -58,6 +58,8 @@ public:
                     cam.ip = detail::fromChars(ip.szIP);
                     cam.subnetMask = detail::fromChars(ip.szSubNetMask);
                     cam.gateway = detail::fromChars(ip.szGateWay);
+                    cam.nicIp = detail::fromChars(ip.szNICIP);
+                    cam.nicMask = detail::fromChars(ip.szNICSubNetMask);
                 }
             } else {
                 continue; // USB2, CXP, smart cameras: not used
