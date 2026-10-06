@@ -5,7 +5,8 @@ add_library(vsort_common STATIC
   src/version.cpp
   src/error.cpp
   src/timestamp.cpp
-  src/logging.cpp)
+  src/logging.cpp
+  src/module_registry.cpp)
 add_library(vsort::common ALIAS vsort_common)
 
 target_include_directories(vsort_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
