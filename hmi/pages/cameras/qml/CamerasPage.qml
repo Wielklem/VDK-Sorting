@@ -1,11 +1,7 @@
 import QtQuick
 
-Rectangle {
-    color: "#f3f4f6"
 
-    Text {
-        anchors.centerIn: parent
-        text: "G30 Cameras (placeholder)"
-        font.pixelSize: 28
-    }
+// G30 Cameras. `liveView` is the LiveViewModel that main.cpp puts into the QML context.
+LiveViewPage {
+    live: liveView
 }

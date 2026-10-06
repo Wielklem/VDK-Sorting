@@ -22,6 +22,7 @@ target_link_libraries(vsort_hmi_core PUBLIC vsort_hmi_ipage Qt6::Core)
 vsort_set_warnings(vsort_hmi_core)
 
 add_subdirectory(src/video)
+add_subdirectory(src/live)
 
 qt_add_executable(vsort_hmi
   src/main.cpp)
@@ -42,7 +43,7 @@ qt_add_qml_module(vsort_hmi
 
 target_sources(vsort_hmi PRIVATE ${VSORT_HMI_VIDEO_ITEM_SOURCES})
 target_link_libraries(vsort_hmi PRIVATE Qt6::Quick Qt6::QuickControls2 vsort::common
-                                        vsort_hmi_core vsort_hmi_video)
+                                        vsort_hmi_core vsort_hmi_video vsort_hmi_live)
 vsort_set_warnings(vsort_hmi)
 
 # Dev-only: shows VideoItem with a generated test pattern.
@@ -65,4 +66,39 @@ if(VSORT_BUILD_TESTS AND NOT WIN32)
   set_tests_properties(hmi_gallery_selftest PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
     TIMEOUT 60)
+endif()
+
+# GUI tests: render the real G30.10 page offscreen against a fake service. The test executable
+# has its own QML module "VsortHmiTest" (same Theme/Vs* files) and renders copies of the page
+# files with "import VsortHmi" rewritten, so it never shares a module URI with vsort_hmi.
+# Linux only, like the gallery self-test above.
+if(VSORT_BUILD_TESTS AND NOT WIN32)
+  set(VSORT_GUI_PAGES_DIR ${CMAKE_CURRENT_BINARY_DIR}/gui_tests_pages)
+  foreach(name LiveViewPage CameraTile)
+    set(src ${CMAKE_CURRENT_SOURCE_DIR}/pages/cameras/qml/${name}.qml)
+    file(READ ${src} content)
+    string(REPLACE "import VsortHmi\n" "import VsortHmiTest\n" content "${content}")
+    file(WRITE ${VSORT_GUI_PAGES_DIR}/${name}.qml "${content}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${src})
+  endforeach()
+
+  qt_add_executable(vsort_hmi_gui_tests
+    tests/gui/main.cpp
+    tests/gui/test_live_view_gui.cpp)
+  qt_add_qml_module(vsort_hmi_gui_tests
+    URI VsortHmiTest
+    VERSION 1.0
+    QML_FILES
+      qml/Theme.qml
+      qml/VsText.qml
+      qml/VsButton.qml)
+  target_sources(vsort_hmi_gui_tests PRIVATE ${VSORT_HMI_VIDEO_ITEM_SOURCES})
+  target_compile_definitions(vsort_hmi_gui_tests PRIVATE
+    VSORT_CAMERAS_QML_DIR="${VSORT_GUI_PAGES_DIR}")
+  target_link_libraries(vsort_hmi_gui_tests PRIVATE
+    Qt6::Quick Qt6::QuickControls2 vsort_hmi_test_support vsort_hmi_live GTest::gtest)
+  # Fixed TCP ports and shared-memory names: never run in parallel with the other IPC tests.
+  gtest_discover_tests(vsort_hmi_gui_tests PROPERTIES
+    RESOURCE_LOCK ipc_resources
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
