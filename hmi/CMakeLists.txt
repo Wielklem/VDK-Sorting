@@ -21,6 +21,8 @@ add_library(vsort_hmi_core STATIC
 target_link_libraries(vsort_hmi_core PUBLIC vsort_hmi_ipage Qt6::Core)
 vsort_set_warnings(vsort_hmi_core)
 
+add_subdirectory(src/video)
+
 qt_add_executable(vsort_hmi
   src/main.cpp)
 
@@ -38,9 +40,17 @@ qt_add_qml_module(vsort_hmi
     qml/VsTable.qml
     qml/VsDialog.qml)
 
+target_sources(vsort_hmi PRIVATE ${VSORT_HMI_VIDEO_ITEM_SOURCES})
 target_link_libraries(vsort_hmi PRIVATE Qt6::Quick Qt6::QuickControls2 vsort::common
-                                        vsort_hmi_core)
+                                        vsort_hmi_core vsort_hmi_video)
 vsort_set_warnings(vsort_hmi)
+
+# Dev-only: shows VideoItem with a generated test pattern.
+add_executable(vsort_video_demo
+  demo/video_demo.cpp
+  ${VSORT_HMI_VIDEO_ITEM_SOURCES})
+target_link_libraries(vsort_video_demo PRIVATE Qt6::Quick vsort_hmi_video)
+vsort_set_warnings(vsort_video_demo)
 
 add_subdirectory(pages)
 
