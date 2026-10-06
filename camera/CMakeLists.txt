@@ -1,5 +1,5 @@
 # Interfaces plus the resilient wrapper (P20.50). The Daheng adapter (P20.30) is opt-in;
-# the replay camera comes in P20.70.
+# the recorder (P20.60) and the replay camera (P20.70) are always built.
 find_package(Threads REQUIRED)
 add_library(vsort_camera STATIC src/resilient_camera.cpp)
 add_library(vsort::camera ALIAS vsort_camera)
@@ -15,6 +15,7 @@ if(VSORT_WITH_GALAXY)
 endif()
 
 add_subdirectory(recorder)
+add_subdirectory(replay)
 
 if(VSORT_BUILD_TESTS)
   add_subdirectory(tests)
