@@ -19,6 +19,7 @@ enum class Errc : std::uint8_t {
     ValidationFailed,
     DeviceError,
     Internal,
+    PermissionDenied,  // appended: existing values stay stable
 };
 
 [[nodiscard]] std::string_view toString(Errc code) noexcept;

@@ -18,3 +18,5 @@ set_target_properties(vsort_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(VSORT_BUILD_TESTS)
   add_subdirectory(tests)
 endif()
+
+add_subdirectory(platform)
