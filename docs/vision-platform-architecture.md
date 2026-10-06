@@ -295,15 +295,15 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P20.40 [BUSY]** Tune GigE: jumbo frames, packet delay, NIC receive buffers. Write the Ubuntu PC setup checklist.
 - **P20.50 [BUSY]** Add camera health handling: auto-reconnect, error counters, frame-ID gap detection.
 - **P20.60 [BUSY]** Build the recorder (M30.30): raw frames plus metadata, one folder per session.
-- **P20.70** Build the replay camera (M30.20): plays recordings through `ICamera` at original or adjustable rate, with loop support.
-- **P20.80** Add camera mapping in config: serial number → logical camera ID.
-- **P20.90** Build a CLI record tool and record initial datasets on the existing machine.
+- **P20.70 [BUSY]** Build the replay camera (M30.20): plays recordings through `ICamera` at original or adjustable rate, with loop support.
+- **P20.80 [BUSY]** Add camera mapping in config: serial number → logical camera ID.
+- **P20.90 [BUSY]** Build a CLI record tool and record initial datasets on the existing machine.
 
 **Done when:** all cameras grab on the external trigger without drops at target rate, and datasets are recorded.
 
 #### P30 HMI shell + live view (M100, G30)
-- **P30.10** Design the IPC: a shared-memory ring buffer per camera for preview frames (via `ISharedMemory`, M15), ZeroMQ for commands and events, and a serialization format (FlatBuffers or Protobuf).
-- **P30.20** Build the service-side IPC server: preview downscaler (configurable fps and resolution) and command handler.
+- **P30.10 [BUSY]** Design the IPC: a shared-memory ring buffer per camera for preview frames (via `ISharedMemory`, M15), ZeroMQ for commands and events, and a serialization format (FlatBuffers or Protobuf).
+- **P30.20 [BUSY]** Build the service-side IPC server: preview downscaler (configurable fps and resolution) and command handler.
 - **P30.30** Build the HMI skeleton: Qt Quick app, navigation bar, `IPage` plugin loader.
 - **P30.40** Build the design system: colours, typography, standard QML components (buttons, numeric inputs, tables, dialogs).
 - **P30.50** Build the video item: a custom `QQuickItem` that renders frames as GPU textures.
