@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -42,6 +43,12 @@ public:
 
     void requestCameraList();
     void setPreview(quint16 cameraId, bool enabled); // fps / width: keep the service values
+    void requestCameraSettings(quint16 cameraId);
+    // Replies with cameraSettingsApplied(); errors arrive as commandFailed().
+    void setCameraSettings(quint16 cameraId, const CameraSettingsData& settings);
+    // Whole config module as JSON. setConfig() is answered with configReceived() (stored copy).
+    void requestConfig(const QString& module);
+    void setConfig(const QString& module, const QByteArray& json);
 
 signals:
     void connectedChanged(bool connected);
@@ -49,6 +56,9 @@ signals:
     void cameraUpdated(const vsort::hmi::CameraInfo& camera);
     void streamChanged(quint16 cameraId, const QString& shmName, quint32 generation);
     void commandFailed(const QString& what);
+    void cameraSettingsReceived(quint16 cameraId, const vsort::hmi::CameraSettingsData& settings);
+    void cameraSettingsApplied();
+    void configReceived(const QString& module, const QByteArray& json, quint32 version);
 
 private:
     void poll();

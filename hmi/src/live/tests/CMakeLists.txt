@@ -10,7 +10,8 @@ vsort_set_warnings(vsort_hmi_test_support)
 # tests skip themselves until the shared-memory layer exists (M15.20).
 add_executable(vsort_hmi_live_tests
   main.cpp
-  test_live_view_model.cpp)
+  test_live_view_model.cpp
+  test_setup_models.cpp)
 target_link_libraries(vsort_hmi_live_tests PRIVATE vsort_hmi_test_support GTest::gtest)
 vsort_set_warnings(vsort_hmi_live_tests)
 # Fixed TCP ports and shared-memory names: never run in parallel with the other IPC tests.

@@ -162,7 +162,8 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | MSG-10-01 | Heartbeat | [V1] |
 | MSG-20-01 | ConfigChanged | [V1] |
 | MSG-30-01 | Frame (ID, camera, timestamp, buffer ref) | [V1] |
-| MSG-50-01 | ObjectRecord (object ID, lane, photos) | [V1][REDO] gains encoder position |
+| MSG-50-01 | ObjectRecord (cup ID per lane, lane, photos) | [V1][REDO] gains encoder position |
+| MSG-50-02 | CupCreated / CupMeasurement (lane, cup ID, sensor, key, value or NO_DATA) + snapshot of last 50 cups per lane | [V1] |
 | MSG-60-01 | Measurement | [V1] |
 | MSG-70-01 | Decision | [V1] |
 | MSG-75-01 | EjectCommand | [LATER] |
@@ -200,7 +201,7 @@ Each page is a QML plugin with tabs. Visibility depends on controller capabiliti
 
 | Page | Tabs | Status |
 |---|---|---|
-| **G20 Machine** | G20.10 Lines & lanes [V1] · G20.20 Cameras per lane [V1] · G20.30 Tippers [PARTIAL] logical only · G20.40 Recipes [V1] | [V1] |
+| **G20 Machine** | G20.10 Lines & lanes [V1] · G20.20 Sensor config [V1] (sensor → lane, kind, offset in cups, measurements, "show in Product Monitor") · G20.25 Machine config [V1] (lanes, sensors per lane, offsets) · G20.30 Tippers [PARTIAL] logical only · G20.40 Recipes [V1] | [V1] |
 | **G30 Cameras** | G30.10 Live view, all cameras, freeze/unfreeze [V1] · G30.20 ROI [V1] · G30.30 Exposure/gain [V1] · G30.40 Calibration px→mm [V1] · G30.50 Record/replay [V1] | [V1] |
 | **G40 Controller** | G40.10 Status [PARTIAL] "no controller" · G40.20 IO mapping [LATER] · G40.30 Connection/firmware [LATER] | [PARTIAL] |
 | **G50 Tracking** | G50.10 Photos per object [V1][REDO] · G50.20 Pitch in frames [V1][REDO] → encoder counts · G50.30 Lane ROIs [V1] · G50.40 Resync [V1][REDO] | [V1][REDO] |
@@ -212,6 +213,7 @@ Each page is a QML plugin with tabs. Visibility depends on controller capabiliti
 | **G110 Lights** | G110.10 Strobe timing [LATER] · G110.20 Intensity [LATER] | [LATER] |
 | **G120 Timing & calibration** | G120.10 Encoder ↔ photo [LATER] · G120.20 Encoder ↔ roller ↔ tipper [LATER] · G120.30 Tipper test/jog [LATER] | [LATER] |
 | **G130 Machine state** | G130.10 Run/stop/fault [PARTIAL] · G130.20 Safe-state policy [LATER] | [PARTIAL] |
+| **G140 Product monitor** | G140.10 Live cup table per lane [V1] (lane dropdown, last 50 cups, newest on top, columns from Sensor config, red "no data" cells, freeze / back-to-live button bottom corner) · G140.20 Offset calibration [V1] (step one cup through an empty machine, read the offset per sensor) | [V1] |
 
 ---
 
@@ -226,6 +228,9 @@ Each page is a QML plugin with tabs. Visibility depends on controller capabiliti
 | Resync | Image-based (cup/roller edge) | Encoder reference; image-based as check | [V1][REDO] |
 | Eject timing | — | `eject_at_count` = object count + offset + mechanical delay (G120.20) | [LATER] |
 | Late decision | — | Controller applies default action and logs it | [LATER] |
+| Cup creation | Frame count ÷ photos per cup (V1) | Encoder signal creates the cup; all sensor positions derive from it | [V1][REDO] |
+| Sensor offset | Integer cups from the reference sensor, per sensor | Encoder counts, per sensor | [V1][REDO] |
+| Missing data | Cup stays in the table, cell red "no data" | Same | [V1] |
 
 **Assumptions for V1:**
 - Each hardware trigger increments the camera frame ID by exactly one.
@@ -241,7 +246,8 @@ Each page is a QML plugin with tabs. Visibility depends on controller capabiliti
 | Batch | ID, recipe version, start/stop, operator | [V1] |
 | Object | ID, batch, lane, seq nr, encoder pos | [V1][REDO] encoder pos added |
 | Photo | object, camera, frame ID, timestamp, file ref | [V1] |
-| Measurement | object, stage, values | [V1] |
+| Sensor | ID, lane, kind (camera, weight, …), offset, measurement list, visible flags | [V1] |
+| Measurement | object, sensor, key, value or NO_DATA | [V1] |
 | Decision | object, grade, rule hits, shadow/live flag | [V1] |
 | EjectRecord | object, tipper, planned count, fired/late | [LATER] |
 | Event | source, type, timestamp, payload | [PARTIAL] |
@@ -308,8 +314,8 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P30.40 [BUSY]** Build the design system: colours, typography, standard QML components (buttons, numeric inputs, tables, dialogs).
 - **P30.50 [BUSY]** Build the video item: a custom `QQuickItem` that renders frames as GPU textures.
 - **P30.60 [BUSY]** Build G30.10 Live view: grid of all cameras, single-camera fullscreen, freeze/unfreeze per camera and for all cameras.
-- **P30.70** Build the overlay layer: ROIs, lane lines and detections drawn over the video.
-- **P30.80** Build G30.20 ROI editor and G30.30 camera settings: draw, move and resize ROIs, numeric entry, save to config.
+- **P30.70 [BUSY]** Build the overlay layer: ROIs, lane lines and detections drawn over the video.
+- **P30.80 [BUSY]** Build G30.20 ROI editor and G30.30 camera settings: draw, move and resize ROIs, numeric entry, save to config.
 - **P30.90** Add connection handling: HMI auto-reconnect and a "service offline" state.
 
 **Done when:** live view of all cameras is smooth, and a GUI crash or restart does not affect the service.
@@ -318,7 +324,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P40.10** Define the `ITracker` interface and the ObjectRecord message (MSG-50-01).
 - **P40.20** Split lane ROIs: frame → per-lane crops.
 - **P40.30** Build the frame-sequence tracker: frame count → object sequence number and photo index (photos per object, pitch).
-- **P40.40** Add gap detection: frame-ID or timestamp gaps mark affected objects as "untracked".
+- **P40.40** Add gap detection: frame-ID or timestamp gaps mark affected cups as NO_DATA per sensor (shown red in the Product Monitor).
 - **P40.50** Add image-based resync: detect the cup or roller edge and correct the phase.
 - **P40.60** Build the G50 Tracking page: settings plus a live overlay of object IDs on the images.
 - **P40.70** Test with replay datasets, including artificially dropped frames.
@@ -326,11 +332,11 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 **Done when:** replayed sets map to the correct objects and dropped frames are flagged.
 
 #### P50 Machine configuration (M20, G20) [PARTIAL]
-- **P50.10** Define the machine model schema: machine → lines → lanes → cameras → tippers (logical).
+- **P50.10** Define the machine model schema: machine → lines → lanes → sensors (camera or other, `ISensor`) → tippers (logical). Per sensor: lane, offset in cups, measurement catalog (key, label, unit), visible flag. Analysis stages declare the measurements they produce.
 - **P50.20** Add validation rules: unique IDs, every lane has a camera, no orphan ROIs.
 - **P50.30** Define the recipe model (sorting specs + analytics + tracking parameters), versioned.
 - **P50.40** Build the G20.10 lines and lanes editor.
-- **P50.50** Build the G20.20 camera ↔ lane assignment.
+- **P50.50** Build G20.20 Sensor config and G20.25 Machine config. ROI editor (G30.20) uses lane + sensor dropdowns.
 - **P50.60** Build G20.30 Tippers: logical list only, no timing. [PARTIAL]
 - **P50.70** Build the G20.40 recipe manager: create, copy, activate, compare versions, roll back.
 - **P50.80** Add config import/export to file, for backup.
@@ -371,6 +377,9 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P80.70** Build the G80.30 image browser: filter by batch, grade or lane, with measurements.
 - **P80.80** Add CSV export. [PARTIAL]
 - **P80.90** Add a disk-space guard and basic cleanup. [PARTIAL]
+- **P80.100** Service: per-lane cup ring buffer (last 50), lane cup ID = sensor count − sensor offset, publish MSG-50-02, snapshot on HMI connect.
+- **P80.110** Build G140.10 Product monitor: dynamic columns from Sensor config, red "no data" cells, freeze / back-to-live button.
+- **P80.120** Build G140.20 offset calibration (move one cup through an empty machine, set offsets).
 
 **Done when:** a batch report and history are generated from stored data.
 
@@ -427,6 +436,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P130.10** Build the encoder tracker: trigger log + frame ID → encoder count per photo.
 - **P130.20** Derive the object index from encoder count and pitch.
 - **P130.30** Extend the ObjectRecord message and DB schema with encoder position (migration).
+- **P130.35** Switch cup creation to the encoder signal; convert sensor offsets from cups to encoder counts; the Product Monitor stays unchanged.
 - **P130.40** Rework G50: all settings in encoder counts.
 - **P130.50** Build the G120.10 encoder ↔ photo calibration wizard.
 - **P130.60** Run M50.10 and M50.20 side by side, compare, then retire M50.10.
@@ -501,6 +511,8 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 | Object table (DB) | Lacks encoder position | Schema migration in P130 |
 | SQLite storage | Single-line, limited concurrency | PostgreSQL behind `IStorage` (P180) |
 | G40 Controller page | Status only | Full page in P120 |
+| Cup creation (frame count) | Not encoder based | Encoder-created cups (P130.35) |
+| Sensor offset (cups) | Cups, not encoder counts | Encoder counts (P130.35) |
 
 Everything else is built once and only extended.
 

@@ -103,6 +103,44 @@ void FakeService::handleCommand(zmq::message_t& identity,
             }
         }
     }
+    if (in.payload_type() == fb::Payload::GetCameraSettingsRequest) {
+        const auto* req = in.payload_as_GetCameraSettingsRequest();
+        for (const Cam& cam : cams_) {
+            if (cam.id == req->camera_id()) {
+                const auto settings = fb::CreateCameraSettings(
+                    fbb, cam.exposureUs, cam.gainDb, 0, 0, 0, 0, fb::TriggerMode::Hardware, true);
+                const auto rep = fb::CreateCameraSettingsReply(fbb, cam.id, settings);
+                reply =
+                    ipc::finishEnvelope(fbb, fields, fb::Payload::CameraSettingsReply, rep.Union());
+                break;
+            }
+        }
+    }
+    if (in.payload_type() == fb::Payload::SetCameraSettingsRequest) {
+        const auto* req = in.payload_as_SetCameraSettingsRequest();
+        for (Cam& cam : cams_) {
+            if (cam.id == req->camera_id() && req->settings() != nullptr) {
+                cam.exposureUs = req->settings()->exposure_us();
+                cam.gainDb = req->settings()->gain_db();
+                reply = ipc::finishEnvelope(fbb, fields, fb::Payload::NONE, {});
+                break;
+            }
+        }
+    }
+    if (in.payload_type() == fb::Payload::GetConfigRequest) {
+        const auto* req = in.payload_as_GetConfigRequest();
+        const std::string module =
+            req->module_name() != nullptr ? req->module_name()->str() : std::string{};
+        reply = configReply(fbb, fields, module);
+    }
+    if (in.payload_type() == fb::Payload::SetConfigRequest) {
+        const auto* req = in.payload_as_SetConfigRequest();
+        const std::string module =
+            req->module_name() != nullptr ? req->module_name()->str() : std::string{};
+        configs_[module] = req->json() != nullptr ? req->json()->str() : std::string{};
+        ++configVersion_;
+        reply = configReply(fbb, fields, module);
+    }
     if (reply.empty()) {
         fbb.Clear();
         fields.status = 1;
@@ -111,6 +149,16 @@ void FakeService::handleCommand(zmq::message_t& identity,
     }
     (void)router_.send(std::move(identity), zmq::send_flags::sndmore);
     (void)router_.send(zmq::buffer(reply), zmq::send_flags::none);
+}
+
+std::vector<std::uint8_t> FakeService::configReply(flatbuffers::FlatBufferBuilder& fbb,
+                                                   const ipc::EnvelopeFields& fields,
+                                                   const std::string& module) const {
+    const auto it = configs_.find(module);
+    const std::string json = it != configs_.end() ? it->second : std::string{R"({"cameras":[]})"};
+    const auto reply = fb::CreateConfigReply(fbb, fbb.CreateString(module), fbb.CreateString(json),
+                                             configVersion_);
+    return ipc::finishEnvelope(fbb, fields, fb::Payload::ConfigReply, reply.Union());
 }
 
 void FakeService::publishHeartbeat() {

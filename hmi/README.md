@@ -10,3 +10,9 @@ Qt 6 / QML operator interface (M100, pages G20–G130). Separate process; talks 
 ## Overlay layer (P30.70)
 - `OverlayLayer` (in `VsortHmi`): draws ROIs, lane lines and detections over a `VideoItem`. Coordinates are camera-frame pixels; bind `sourceSize` to the video's `sourceSize`.
 - Used by page G35 Calibrate. Data (`rois`, `lanes`, `detections`) comes with P30.80 and P40; until then use the "Demo data" button.
+
+## ROI editor and camera settings (P30.80)
+- G30 Cameras has tabs: Live view (G30.10), ROI (G30.20), Camera settings (G30.30).
+- ROIs are stored per camera in the config module `rois` as fractions (0..1) of the camera image, so they do not depend on the preview size. The editor shows percent. If the camera's hardware ROI changes, the stored ROIs refer to the new image.
+- Draw on the picture, drag to move, drag a corner to resize, or type values. Nothing is sent before Save; Reload discards unsaved edits.
+- Camera settings (exposure, gain) go to the camera as soon as you press Apply; the HMI then reads back what the camera accepted.

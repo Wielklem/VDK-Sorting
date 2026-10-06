@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -33,17 +34,32 @@ public:
 
     [[nodiscard]] int cameraListRequests() const noexcept { return cameraListRequests_; }
     [[nodiscard]] int setPreviewRequests() const noexcept { return setPreviewRequests_; }
+    // Exposure the fake camera currently has (changed by SetCameraSettings).
+    [[nodiscard]] double exposureUs(std::uint16_t cameraId) const {
+        for (const Cam& cam : cams_) {
+            if (cam.id == cameraId) {
+                return cam.exposureUs;
+            }
+        }
+        return 0.0;
+    }
 
 private:
     struct Cam {
         std::uint16_t id{0};
         std::string shm;
         bool previewEnabled{false};
+        double exposureUs{5000.0};
+        double gainDb{2.0};
         std::unique_ptr<ipc::PreviewRingWriter> ring;
     };
 
     void handleCommand(zmq::message_t& identity, const std::vector<std::uint8_t>& request);
     void publishHeartbeat();
+    [[nodiscard]] std::vector<std::uint8_t> configReply(flatbuffers::FlatBufferBuilder& fbb,
+                                                        const ipc::EnvelopeFields& fields,
+                                                        const std::string& module) const;
+
     [[nodiscard]] flatbuffers::Offset<ipc::fb::CameraEntry>
     entry(flatbuffers::FlatBufferBuilder& fbb, const Cam& cam) const;
 
@@ -58,6 +74,8 @@ private:
     std::uint64_t frameSeq_{0};
     int cameraListRequests_{0};
     int setPreviewRequests_{0};
+    std::map<std::string, std::string> configs_; // module -> JSON, like the service config store
+    std::uint32_t configVersion_{1};
 };
 
 } // namespace vsort::hmi::test

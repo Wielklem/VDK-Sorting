@@ -14,7 +14,9 @@
 #include <vsort/hmi/page_registry.hpp>
 #include <vsort/hmi/plugin_loader.hpp>
 
+#include "live/camera_settings_model.hpp"
 #include "live/live_view_model.hpp"
+#include "live/roi_editor_model.hpp"
 #include "live/service_client.hpp"
 
 namespace {
@@ -56,6 +58,10 @@ int main(int argc, char* argv[]) {
     vsort::hmi::ServiceClient serviceClient;
     // NOLINTNEXTLINE(misc-const-correctness): QML calls non-const invokables
     vsort::hmi::LiveViewModel liveView{serviceClient};
+    // NOLINTNEXTLINE(misc-const-correctness): QML calls non-const invokables
+    vsort::hmi::RoiEditorModel roiEditor{serviceClient};
+    // NOLINTNEXTLINE(misc-const-correctness): QML calls non-const invokables
+    vsort::hmi::CameraSettingsModel cameraSettings{serviceClient};
     if (!gallery) {
         const auto loaded = vsort::hmi::loadPagePlugins(vsort::hmi::defaultPluginDir(), registry);
         for (const auto& error : loaded.errors) {
@@ -70,6 +76,8 @@ int main(int argc, char* argv[]) {
     if (!gallery) {
         engine.setInitialProperties({{QStringLiteral("pages"), QVariant::fromValue(&registry)}});
         engine.rootContext()->setContextProperty(QStringLiteral("liveView"), &liveView);
+        engine.rootContext()->setContextProperty(QStringLiteral("roiEditor"), &roiEditor);
+        engine.rootContext()->setContextProperty(QStringLiteral("cameraSettings"), &cameraSettings);
         serviceClient.start();
     } else if (selfTest) {
         engine.setInitialProperties({{QStringLiteral("selfTest"), true}});
