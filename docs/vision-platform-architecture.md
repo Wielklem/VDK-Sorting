@@ -276,9 +276,9 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P10.20 [DONE]** Set up a CMake superbuild with presets (debug, release) for Linux and Windows, and a vcpkg manifest for Qt 6, OpenCV, cppzmq, spdlog, nlohmann-json, SQLite and GoogleTest.
 - **P10.30 [DONE]** Set up the CI pipeline: build and unit tests on Ubuntu and Windows, clang-tidy on Ubuntu, and store build artifacts. A broken Windows build blocks the merge.
 - **P10.40 [DONE]** Build the common library: base types (Timestamp, FrameId, ObjectId), error handling (`std::expected`), and logging (spdlog, rotating files). Includes little-endian helpers and the CI portability check (`tools/check_portability.sh`).
-- **P10.45 [DONE]** BBuild the platform layer (M15): interfaces plus the Linux implementation (M15.10). On Windows, stubs that compile and return "not supported", so CI stays green. Lives in `common/platform/` as the separate library `vsort::platform`.
-- **P10.50** Build the message bus: typed publish/subscribe, bounded lock-free queues, drop counters.
-- **P10.60** Build the module framework: `IModule` (init/start/stop/health), module registry, startup and shutdown order.
+- **P10.45 [BUSY]** Build the platform layer (M15): interfaces plus the Linux implementation (M15.10). On Windows, stubs that compile and return "not supported", so CI stays green. Lives in `common/platform/` as the separate library `vsort::platform`.
+- **P10.50 [BUSY]** Build the message bus: typed publish/subscribe, bounded lock-free queues, drop counters.
+- **P10.60 [BUSY]** Build the module framework: `IModule` (init/start/stop/health), module registry, startup and shutdown order.
 - **P10.70** Build the service executable: CLI arguments, stop signals via `IServiceHost` (M15), graceful shutdown.
 - **P10.80** Build the config store: JSON schema per module, load/validate/save, versioning (ConfigVersion), and the MSG-20-01 change notification.
 - **P10.90** Set up unit tests for the bus and config store, and add them to CI.
