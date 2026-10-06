@@ -44,6 +44,24 @@ CameraInfo toCameraInfo(const fb::CameraEntry& entry) {
     return info;
 }
 
+QByteArray toBytes(const flatbuffers::String* text) {
+    return text != nullptr ? QByteArray(text->c_str(), static_cast<qsizetype>(text->size()))
+                           : QByteArray{};
+}
+
+CameraSettingsData toSettings(const fb::CameraSettings& settings) {
+    CameraSettingsData out;
+    out.exposureUs = settings.exposure_us();
+    out.gainDb = settings.gain_db();
+    out.roiX = settings.roi_x();
+    out.roiY = settings.roi_y();
+    out.roiWidth = settings.roi_width();
+    out.roiHeight = settings.roi_height();
+    out.triggerMode = static_cast<std::uint8_t>(settings.trigger_mode());
+    out.triggerRising = settings.trigger_rising();
+    return out;
+}
+
 std::string endpoint(const QString& host, quint16 port) {
     return "tcp://" + host.toStdString() + ":" + std::to_string(port);
 }
@@ -89,6 +107,39 @@ void ServiceClient::setPreview(quint16 cameraId, bool enabled) {
     // fps = 0 and max_width = 0: keep the values the service already has.
     const auto request = fb::CreateSetPreviewRequest(fbb, cameraId, enabled, 0, 0);
     sendRequest(fb::MsgType::SetPreview, fb::Payload::SetPreviewRequest, fbb, request.Union());
+}
+
+void ServiceClient::requestCameraSettings(quint16 cameraId) {
+    flatbuffers::FlatBufferBuilder fbb{128};
+    const auto request = fb::CreateGetCameraSettingsRequest(fbb, cameraId);
+    sendRequest(fb::MsgType::GetCameraSettings, fb::Payload::GetCameraSettingsRequest, fbb,
+                request.Union());
+}
+
+void ServiceClient::setCameraSettings(quint16 cameraId, const CameraSettingsData& settings) {
+    flatbuffers::FlatBufferBuilder fbb{256};
+    const auto data = fb::CreateCameraSettings(
+        fbb, settings.exposureUs, settings.gainDb, settings.roiX, settings.roiY, settings.roiWidth,
+        settings.roiHeight, static_cast<fb::TriggerMode>(settings.triggerMode),
+        settings.triggerRising);
+    const auto request = fb::CreateSetCameraSettingsRequest(fbb, cameraId, data);
+    sendRequest(fb::MsgType::SetCameraSettings, fb::Payload::SetCameraSettingsRequest, fbb,
+                request.Union());
+}
+
+void ServiceClient::requestConfig(const QString& module) {
+    flatbuffers::FlatBufferBuilder fbb{128};
+    const auto name = fbb.CreateString(module.toStdString());
+    const auto request = fb::CreateGetConfigRequest(fbb, name);
+    sendRequest(fb::MsgType::GetConfig, fb::Payload::GetConfigRequest, fbb, request.Union());
+}
+
+void ServiceClient::setConfig(const QString& module, const QByteArray& json) {
+    flatbuffers::FlatBufferBuilder fbb{static_cast<std::size_t>(json.size()) + 256};
+    const auto name = fbb.CreateString(module.toStdString());
+    const auto body = fbb.CreateString(json.constData(), static_cast<std::size_t>(json.size()));
+    const auto request = fb::CreateSetConfigRequest(fbb, name, body);
+    sendRequest(fb::MsgType::SetConfig, fb::Payload::SetConfigRequest, fbb, request.Union());
 }
 
 void ServiceClient::sendRequest(fb::MsgType type, fb::Payload payloadType,
@@ -187,6 +238,25 @@ void ServiceClient::handleMessage(std::span<const std::uint8_t> bytes) {
         emit streamChanged(event->camera_id(), toQString(event->shm_name()), event->generation());
         break;
     }
+    case fb::Payload::CameraSettingsReply: {
+        const auto* reply = envelope.payload_as_CameraSettingsReply();
+        if (reply->settings() != nullptr) {
+            emit cameraSettingsReceived(reply->camera_id(), toSettings(*reply->settings()));
+        }
+        break;
+    }
+    case fb::Payload::ConfigReply: {
+        const auto* reply = envelope.payload_as_ConfigReply();
+        emit configReceived(toQString(reply->module_name()), toBytes(reply->json()),
+                            reply->version());
+        break;
+    }
+    case fb::Payload::NONE:
+        // SetCameraSettings is answered with an empty payload.
+        if (envelope.msg_type() == static_cast<std::uint16_t>(fb::MsgType::SetCameraSettings)) {
+            emit cameraSettingsApplied();
+        }
+        break;
     default:
         break; // not needed by the live view
     }

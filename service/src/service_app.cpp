@@ -14,8 +14,10 @@
 #include <vsort/common/logging.hpp>
 #include <vsort/common/message_bus.hpp>
 #include <vsort/common/module_registry.hpp>
+#include <vsort/common/roi_config.hpp>
 #include <vsort/common/version.hpp>
 #include <vsort/platform/paths.hpp>
+
 #include "ipc/ipc_server.hpp"
 
 namespace vsort::service {
@@ -61,9 +63,8 @@ int runService(const Options& options, platform::IServiceHost& host) {
     }
 
     // 2. Logging (rotating file in logDir)
-    const log::Config logConfig{.directory = paths->logDir(),
-                                .level = options.logLevel,
-                                .console = !options.noConsole};
+    const log::Config logConfig{
+        .directory = paths->logDir(), .level = options.logLevel, .console = !options.noConsole};
     if (const auto logging = log::init(logConfig); !logging) {
         return fail("cannot start logging", logging.error());
     }
@@ -79,7 +80,12 @@ int runService(const Options& options, platform::IServiceHost& host) {
     MessageBus bus;
     FileConfigStore configStore{paths->configDir(), bus};
     ModuleContext context{bus};
-    ModuleRegistry registry;  // declared after bus and configStore: destroyed before them
+    if (const auto roiConfig = registerRoiConfig(configStore); !roiConfig) {
+        spdlog::critical("cannot register ROI config: {}", roiConfig.error().what());
+        log::shutdown();
+        return kExitFailure;
+    }
+    ModuleRegistry registry; // declared after bus and configStore: destroyed before them
     // Modules are added here as they are implemented: registry.add(std::make_unique<...>());
     // The camera module will call IpcServer::preview().submit() and replace NullCameraAccess.
     if (const auto added = registry.add(std::make_unique<IpcServer>(

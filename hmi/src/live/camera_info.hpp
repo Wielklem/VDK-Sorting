@@ -18,4 +18,17 @@ struct CameraInfo {
     std::uint32_t generation{0};
 };
 
+// Camera settings as the service reports them (MSG 3013/3014). The HMI edits exposure and gain
+// only; the other fields are sent back unchanged.
+struct CameraSettingsData {
+    double exposureUs{0.0};
+    double gainDb{0.0};
+    std::uint32_t roiX{0};
+    std::uint32_t roiY{0};
+    std::uint32_t roiWidth{0};   // 0 = full sensor
+    std::uint32_t roiHeight{0};  // 0 = full sensor
+    std::uint8_t triggerMode{3}; // 1 free run, 2 software, 3 hardware
+    bool triggerRising{true};
+};
+
 } // namespace vsort::hmi

@@ -75,7 +75,7 @@ endif()
 # Linux only, like the gallery self-test above.
 if(VSORT_BUILD_TESTS AND NOT WIN32)
   set(VSORT_GUI_PAGES_DIR ${CMAKE_CURRENT_BINARY_DIR}/gui_tests_pages)
-  foreach(name LiveViewPage CameraTile)
+  foreach(name LiveViewPage CameraTile CameraPicker RoiEditorPage CameraSettingsPage)
     set(src ${CMAKE_CURRENT_SOURCE_DIR}/pages/cameras/qml/${name}.qml)
     file(READ ${src} content)
     string(REPLACE "import VsortHmi\n" "import VsortHmiTest\n" content "${content}")
@@ -86,7 +86,8 @@ if(VSORT_BUILD_TESTS AND NOT WIN32)
   qt_add_executable(vsort_hmi_gui_tests
     tests/gui/main.cpp
     tests/gui/test_live_view_gui.cpp
-    tests/gui/test_overlay_layer_gui.cpp)
+    tests/gui/test_overlay_layer_gui.cpp
+    tests/gui/test_setup_gui.cpp)
   qt_add_qml_module(vsort_hmi_gui_tests
     URI VsortHmiTest
     VERSION 1.0
@@ -94,6 +95,7 @@ if(VSORT_BUILD_TESTS AND NOT WIN32)
       qml/Theme.qml
       qml/VsText.qml
       qml/VsButton.qml
+      qml/VsNumberInput.qml
       qml/OverlayLayer.qml)
   target_sources(vsort_hmi_gui_tests PRIVATE ${VSORT_HMI_VIDEO_ITEM_SOURCES})
   target_compile_definitions(vsort_hmi_gui_tests PRIVATE
