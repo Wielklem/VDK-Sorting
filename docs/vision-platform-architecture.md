@@ -304,10 +304,10 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 #### P30 HMI shell + live view (M100, G30)
 - **P30.10 [BUSY]** Design the IPC: a shared-memory ring buffer per camera for preview frames (via `ISharedMemory`, M15), ZeroMQ for commands and events, and a serialization format (FlatBuffers or Protobuf).
 - **P30.20 [BUSY]** Build the service-side IPC server: preview downscaler (configurable fps and resolution) and command handler.
-- **P30.30** Build the HMI skeleton: Qt Quick app, navigation bar, `IPage` plugin loader.
-- **P30.40** Build the design system: colours, typography, standard QML components (buttons, numeric inputs, tables, dialogs).
-- **P30.50** Build the video item: a custom `QQuickItem` that renders frames as GPU textures.
-- **P30.60** Build G30.10 Live view: grid of all cameras, single-camera fullscreen, freeze/unfreeze per camera and for all cameras.
+- **P30.30 [BUSY]** Build the HMI skeleton: Qt Quick app, navigation bar, `IPage` plugin loader.
+- **P30.40 [BUSY]** Build the design system: colours, typography, standard QML components (buttons, numeric inputs, tables, dialogs).
+- **P30.50 [BUSY]** Build the video item: a custom `QQuickItem` that renders frames as GPU textures.
+- **P30.60 [BUSY]** Build G30.10 Live view: grid of all cameras, single-camera fullscreen, freeze/unfreeze per camera and for all cameras.
 - **P30.70** Build the overlay layer: ROIs, lane lines and detections drawn over the video.
 - **P30.80** Build G30.20 ROI editor and G30.30 camera settings: draw, move and resize ROIs, numeric entry, save to config.
 - **P30.90** Add connection handling: HMI auto-reconnect and a "service offline" state.

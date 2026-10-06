@@ -6,11 +6,12 @@
 #include <cstdint>
 
 #include "video/frame_mailbox.hpp"
+#include "video/frame_sink.hpp"
 
 namespace vsort::hmi {
 
 // Shows the newest submitted frame as a GPU texture, aspect-fit and centred.
-class VideoItem : public QQuickItem {
+class VideoItem : public QQuickItem, public IFrameSink {
     Q_OBJECT
     Q_PROPERTY(bool hasFrame READ hasFrame NOTIFY hasFrameChanged)
     Q_PROPERTY(QSize sourceSize READ sourceSize NOTIFY sourceSizeChanged)
@@ -19,8 +20,8 @@ public:
     explicit VideoItem(QQuickItem* parent = nullptr);
 
     // Thread-safe; the newest frame wins. nullptr clears the picture.
-    void submitFrame(FramePtr frame);
-    Q_INVOKABLE void clear();
+    void submitFrame(FramePtr frame) override;
+    Q_INVOKABLE void clear() override;
 
     [[nodiscard]] bool hasFrame() const noexcept { return hasFrame_; }
     [[nodiscard]] QSize sourceSize() const noexcept { return sourceSize_; }

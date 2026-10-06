@@ -1,6 +1,7 @@
 #include <QDebug>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -12,6 +13,9 @@
 #include <vsort/common/version.hpp>
 #include <vsort/hmi/page_registry.hpp>
 #include <vsort/hmi/plugin_loader.hpp>
+
+#include "live/live_view_model.hpp"
+#include "live/service_client.hpp"
 
 namespace {
 
@@ -48,6 +52,10 @@ int main(int argc, char* argv[]) {
 
     // Declared before the engine so it outlives it.
     vsort::hmi::PageRegistry registry;
+    // Live view backend (P30.60); also declared before the engine. Only used by the real pages.
+    vsort::hmi::ServiceClient serviceClient;
+    // NOLINTNEXTLINE(misc-const-correctness): QML calls non-const invokables
+    vsort::hmi::LiveViewModel liveView{serviceClient};
     if (!gallery) {
         const auto loaded = vsort::hmi::loadPagePlugins(vsort::hmi::defaultPluginDir(), registry);
         for (const auto& error : loaded.errors) {
@@ -61,6 +69,8 @@ int main(int argc, char* argv[]) {
         [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     if (!gallery) {
         engine.setInitialProperties({{QStringLiteral("pages"), QVariant::fromValue(&registry)}});
+        engine.rootContext()->setContextProperty(QStringLiteral("liveView"), &liveView);
+        serviceClient.start();
     } else if (selfTest) {
         engine.setInitialProperties({{QStringLiteral("selfTest"), true}});
     }
