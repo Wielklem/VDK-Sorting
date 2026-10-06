@@ -1,0 +1,5 @@
+add_executable(vsort_service_tests
+  test_cli.cpp)
+target_link_libraries(vsort_service_tests PRIVATE vsort_service_core GTest::gtest_main)
+vsort_set_warnings(vsort_service_tests)
+gtest_discover_tests(vsort_service_tests)
