@@ -15,7 +15,8 @@ find_package(Threads REQUIRED)
 
 add_library(vsort_camera_daheng STATIC
   src/galaxy_lib.cpp
-  src/daheng_discovery.cpp)
+  src/daheng_discovery.cpp
+  src/daheng_camera.cpp)
 add_library(vsort::camera_daheng ALIAS vsort_camera_daheng)
 
 target_include_directories(vsort_camera_daheng
@@ -31,3 +32,7 @@ set_target_properties(vsort_camera_daheng PROPERTIES POSITION_INDEPENDENT_CODE O
 add_executable(vsort_daheng_probe tools/daheng_probe.cpp)
 target_link_libraries(vsort_daheng_probe PRIVATE vsort::camera_daheng)
 vsort_set_warnings(vsort_daheng_probe)
+
+if(VSORT_BUILD_TESTS)
+  add_subdirectory(tests)
+endif()
