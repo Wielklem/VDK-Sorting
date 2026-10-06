@@ -40,3 +40,19 @@ TEST(DahengCamera, StopAndCloseAreSafeWhenNotOpen) {
     camera->close();
     EXPECT_FALSE(camera->isOpen());
 }
+
+TEST(DahengGigEConfigurator, InvalidRequestIsRejectedBeforeTouchingTheSdk) {
+    const auto configurator = makeDahengGigEConfigurator();
+    const auto result =
+        configurator->setIp({.mac = "bad", .ip = "192.168.1.5", .subnetMask = "255.255.255.0"});
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, Errc::InvalidArgument);
+}
+
+TEST(DahengGigEConfigurator, UnknownMacReportsNotFound) {
+    const auto configurator = makeDahengGigEConfigurator();
+    const auto result = configurator->setIp(
+        {.mac = "02:00:00:00:00:99", .ip = "192.168.1.5", .subnetMask = "255.255.255.0"});
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, Errc::NotFound);
+}

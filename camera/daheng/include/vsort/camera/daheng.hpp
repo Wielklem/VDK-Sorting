@@ -5,6 +5,7 @@
 
 #include <vsort/camera/camera.hpp>
 #include <vsort/camera/discovery.hpp>
+#include <vsort/camera/ip_config.hpp>
 
 namespace vsort::camera {
 
@@ -18,5 +19,6 @@ struct DahengOptions {
 // The Galaxy SDK is not visible in this header.
 [[nodiscard]] std::unique_ptr<ICamera> makeDahengCamera(const DahengOptions& options = {});
 [[nodiscard]] std::unique_ptr<ICameraDiscovery> makeDahengDiscovery();
+[[nodiscard]] std::unique_ptr<IGigEConfigurator> makeDahengGigEConfigurator();
 
 } // namespace vsort::camera

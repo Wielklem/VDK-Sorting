@@ -19,6 +19,8 @@ struct DiscoveredCamera {
     std::string ip;
     std::string subnetMask;
     std::string gateway;
+    std::string nicIp;   // IP of the NIC the camera was found on (SDK-reported, GigE only)
+    std::string nicMask; // subnet mask of that NIC
 };
 
 // Implemented by the Daheng adapter (M30.10).

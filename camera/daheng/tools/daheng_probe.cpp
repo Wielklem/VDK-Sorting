@@ -1,5 +1,7 @@
 // Manual hardware check for the Daheng adapter (P20.30).
-//   vsort_daheng_probe                                      list cameras
+//   vsort_daheng_probe                                      list cameras, flag those outside the
+//   NIC subnet vsort_daheng_probe setip <mac> <ip> <mask> [gateway] [temp]
+//       set the GigE IP by MAC. Persistent unless "temp" (lost at power cycle).
 //   vsort_daheng_probe <serial> [seconds] [exposureUs] [freerun]
 //       open, grab for <seconds> and print the frames that arrive.
 //       Default: hardware trigger on Line0 (rising edge). "freerun": no trigger needed.
@@ -17,6 +19,44 @@ namespace {
 using namespace vsort;
 using namespace vsort::camera;
 
+const char* subnetText(const DiscoveredCamera& cam) {
+    switch (subnetStatus(cam)) {
+    case SubnetStatus::Inside:
+        return "OK";
+    case SubnetStatus::Outside:
+        return "OUTSIDE NIC SUBNET";
+    case SubnetStatus::Unknown:
+        break;
+    }
+    return "subnet unknown";
+}
+
+int setIp(int argc, char** argv) {
+    if (argc < 5) {
+        std::cerr << "usage: vsort_daheng_probe setip <mac> <ip> <mask> [gateway] [temp]\n";
+        return 2;
+    }
+    GigEIpRequest request;
+    request.mac = argv[2];
+    request.ip = argv[3];
+    request.subnetMask = argv[4];
+    for (int i = 5; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "temp") {
+            request.persistent = false;
+        } else {
+            request.gateway = arg;
+        }
+    }
+    if (const auto r = makeDahengGigEConfigurator()->setIp(request); !r) {
+        std::cerr << "setip: " << r.error().what() << '\n';
+        return 1;
+    }
+    std::cout << "IP set (" << (request.persistent ? "persistent" : "until power cycle")
+              << "). Wait ~2 s, then run the probe without arguments to check.\n";
+    return 0;
+}
+
 int listCameras() {
     const auto found = makeDahengDiscovery()->discover();
     if (!found) {
@@ -29,7 +69,8 @@ int listCameras() {
                   << (cam.transport == Transport::GigE ? "GigE" : "USB3");
         if (cam.transport == Transport::GigE) {
             std::cout << "  mac " << cam.mac << "  ip " << cam.ip << "  mask " << cam.subnetMask
-                      << "  gw " << cam.gateway;
+                      << "  gw " << cam.gateway << "  nic " << cam.nicIp << "/" << cam.nicMask
+                      << "  " << subnetText(cam);
         }
         std::cout << '\n';
     }
@@ -41,6 +82,9 @@ int listCameras() {
 int main(int argc, char** argv) {
     if (argc < 2) {
         return listCameras();
+    }
+    if (std::string{argv[1]} == "setip") {
+        return setIp(argc, argv);
     }
     const std::string serial = argv[1];
     const long seconds = argc > 2 ? std::strtol(argv[2], nullptr, 10) : 10;
@@ -69,8 +113,8 @@ int main(int argc, char** argv) {
     if (const auto s = camera->settings()) {
         // trigger mode: 1 free run, 2 software, 3 hardware. edge: 1 rising, 2 falling.
         std::cout << "read back: exposure " << s->exposureUs << " us, gain " << s->gainDb
-                  << " dB, trigger mode " << int(s->triggerMode) << ", edge "
-                  << int(s->triggerEdge) << '\n';
+                  << " dB, trigger mode " << int(s->triggerMode) << ", edge " << int(s->triggerEdge)
+                  << '\n';
     }
 
     // Single grab thread, read only after stop(): no locking needed.
