@@ -1,7 +1,9 @@
 #include "galaxy_lib.hpp"
 
+#include <algorithm>
 #include <array>
 #include <utility>
+#include <vector>
 
 namespace vsort::camera::detail {
 
@@ -90,6 +92,25 @@ Result<std::uint32_t> updateDeviceList() {
         return fail(status, "GXUpdateAllDeviceListEx");
     }
     return count;
+}
+
+Result<GX_DEVICE_CLASS> deviceClassOf(std::string_view serial, std::uint32_t count) {
+    if (count == 0) {
+        return makeError(Errc::NotFound, "no devices");
+    }
+    std::vector<GX_DEVICE_BASE_INFO> infos(count);
+    std::size_t bytes = infos.size() * sizeof(GX_DEVICE_BASE_INFO);
+    if (const GX_STATUS status = GXGetAllDeviceBaseInfo(infos.data(), &bytes);
+        status != GX_STATUS_SUCCESS) {
+        return fail(status, "GXGetAllDeviceBaseInfo");
+    }
+    const std::size_t valid = std::min(infos.size(), bytes / sizeof(GX_DEVICE_BASE_INFO));
+    for (std::size_t i = 0; i < valid; ++i) {
+        if (fromChars(infos[i].szSN) == serial) {
+            return infos[i].deviceClass;
+        }
+    }
+    return makeError(Errc::NotFound, std::string{serial} + " not in the device list");
 }
 
 } // namespace vsort::camera::detail

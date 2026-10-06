@@ -39,6 +39,10 @@ private:
 // Scans USB3 and GigE. Returns the number of devices found. Caller holds lockDeviceList().
 [[nodiscard]] Result<std::uint32_t> updateDeviceList();
 
+// Device class (GX_DEVICE_CLASS_*) of the camera with this serial in the current device list.
+// Caller holds lockDeviceList() and passes the count from updateDeviceList().
+[[nodiscard]] Result<GX_DEVICE_CLASS> deviceClassOf(std::string_view serial, std::uint32_t count);
+
 // SDK strings are fixed char arrays that may not be NUL-terminated.
 template <std::size_t N>
 [[nodiscard]] std::string fromChars(const char (&array)[N]) {

@@ -27,6 +27,9 @@ namespace {
 
 using detail::fail;
 
+// Daheng manual: the timestamp unit of the USB3 cameras is ns.
+constexpr std::uint64_t kUsb3TickHz = 1'000'000'000;
+
 // --- GenICam feature access -------------------------------------------------------------
 
 Result<> setEnum(GX_DEV_HANDLE h, const char* name, std::string_view value) {
@@ -145,11 +148,15 @@ public:
 
         std::string sn{serial};
         GX_DEV_HANDLE handle{};
+        bool usb3 = false;
         {
             const auto lock = detail::lockDeviceList();
-            if (const auto count = detail::updateDeviceList(); !count) {
+            const auto count = detail::updateDeviceList();
+            if (!count) {
                 return propagate(count);
             }
+            const auto deviceClass = detail::deviceClassOf(sn, *count);
+            usb3 = deviceClass.has_value() && *deviceClass == GX_DEVICE_CLASS_U3V;
             GX_OPEN_PARAM param{};
             param.pszContent = sn.data();
             param.openMode = GX_OPEN_SN;
@@ -161,6 +168,7 @@ public:
 
         lib_ = std::move(*lib);
         handle_ = handle;
+        usb3_ = usb3;
         open_ = true;
         if (auto read = readInfo(sn); !read) {
             const Error error = read.error();
@@ -396,9 +404,23 @@ private:
                            .sensorWidth = toU32(width->nCurValue),
                            .sensorHeight = toU32(height->nCurValue)};
 
-        // Device timestamp unit. Without it deviceTimestampNs stays 0 (see FrameMetadata).
-        const auto hz = getInt(handle_, "TimestampTickFrequency");
-        tickHz_ = (hz && hz->nCurValue > 0) ? static_cast<std::uint64_t>(hz->nCurValue) : 0;
+        // Device timestamp unit, from the official source; never derived from measurements.
+        // Without one, deviceTimestampNs stays 0 (see FrameMetadata).
+        std::string source = "none, device timestamps disabled";
+        tickHz_ = 0;
+        if (const auto hz = getInt(handle_, "TimestampTickFrequency"); hz && hz->nCurValue > 0) {
+            tickHz_ = static_cast<std::uint64_t>(hz->nCurValue);
+            source = "TimestampTickFrequency";
+        } else if (const auto gev = getInt(handle_, "GevTimestampTickFrequency");
+                   gev && gev->nCurValue > 0) {
+            tickHz_ = static_cast<std::uint64_t>(gev->nCurValue);
+            source = "GevTimestampTickFrequency";
+        } else if (usb3_) {
+            tickHz_ = kUsb3TickHz;
+            source = "USB3 camera, Daheng manual: timestamp unit is ns";
+        }
+        note(serial + ": timestamp tick frequency " + std::to_string(tickHz_) + " Hz (" + source +
+             ")");
         return {};
     }
 
@@ -454,6 +476,14 @@ private:
     static void warn(const std::string& message) noexcept {
         try {
             log::get("camera")->warn("{}", message);
+        } catch (...) {
+            // Logging must never take the grab thread down.
+        }
+    }
+
+    static void note(const std::string& message) noexcept {
+        try {
+            log::get("camera")->info("{}", message);
         } catch (...) {
             // Logging must never take the grab thread down.
         }
@@ -533,6 +563,7 @@ private:
     std::shared_ptr<detail::GalaxyLib> lib_;
     GX_DEV_HANDLE handle_{};
     bool open_{false};
+    bool usb3_{false};
     CameraInfo info_;
     std::uint64_t tickHz_{0};
     FrameCallback callback_;
