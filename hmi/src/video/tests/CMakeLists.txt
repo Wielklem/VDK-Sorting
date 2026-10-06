@@ -1,0 +1,6 @@
+add_executable(vsort_hmi_video_tests
+  test_frame_convert.cpp
+  test_frame_mailbox.cpp)
+target_link_libraries(vsort_hmi_video_tests PRIVATE vsort_hmi_video GTest::gtest_main)
+vsort_set_warnings(vsort_hmi_video_tests)
+gtest_discover_tests(vsort_hmi_video_tests)
