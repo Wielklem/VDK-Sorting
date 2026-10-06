@@ -19,11 +19,11 @@ TEST(Cli, Defaults) {
 }
 
 TEST(Cli, ParsesOptions) {
-    const std::array args{"--root"sv, "/tmp/x"sv, "--log-level=debug"sv,
+    const std::array args{"--root"sv, "vsort-root"sv, "--log-level=debug"sv,
                           "--check"sv, "--no-console"sv, "--user"sv};
     const auto r = parseArgs(args);
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(r->root, std::filesystem::path{"/tmp/x"});
+    EXPECT_EQ(r->root, std::filesystem::path{"vsort-root"});
     EXPECT_EQ(r->logLevel, vsort::log::Level::Debug);
     EXPECT_TRUE(r->check);
     EXPECT_TRUE(r->noConsole);
