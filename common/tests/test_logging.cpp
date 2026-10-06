@@ -19,6 +19,7 @@ TEST(Logging, WritesRotatingFile) {
     auto logger = vsort::log::get("test");
     logger->info("hello {}", 42);
     logger->flush();
+    logger.reset();          // drop our reference, otherwise the file stays open
     vsort::log::shutdown();  // close files first (Windows can't delete open files)
 
     std::string content;
