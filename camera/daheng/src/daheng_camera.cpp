@@ -175,7 +175,39 @@ public:
             close();
             return std::unexpected<Error>{error};
         }
+        if (!usb3_) {
+            tuneGigE();
+        }
         return {};
+    }
+
+    // GigE stream tuning (P20.40). Never fatal: default settings still grab.
+    void tuneGigE() {
+        if (options_.optimalPacketSize) {
+            std::uint32_t packet = 0;
+            if (const GX_STATUS st = GXGetOptimalPacketSize(handle_, &packet);
+                st != GX_STATUS_SUCCESS || packet == 0) {
+                warn("GXGetOptimalPacketSize failed, SDK status " + std::to_string(st));
+            } else if (const auto r = setInt(handle_, "GevSCPSPacketSize", packet); !r) {
+                warn(r.error().what());
+            }
+        }
+        if (options_.packetDelay > 0) {
+            if (const auto r = setInt(handle_, "GevSCPD", options_.packetDelay); !r) {
+                warn(r.error().what());
+            }
+        }
+        if (options_.acquisitionBuffers > 0) {
+            if (const GX_STATUS st =
+                    GXSetAcqusitionBufferNumber(handle_, options_.acquisitionBuffers);
+                st != GX_STATUS_SUCCESS) {
+                warn("GXSetAcqusitionBufferNumber failed, SDK status " + std::to_string(st));
+            }
+        }
+        const auto size = getInt(handle_, "GevSCPSPacketSize");
+        const auto delay = getInt(handle_, "GevSCPD");
+        note("GigE stream: packet size " + (size ? std::to_string(size->nCurValue) : "?") +
+             ", packet delay " + (delay ? std::to_string(delay->nCurValue) : "?"));
     }
 
     void close() noexcept override {
