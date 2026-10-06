@@ -66,6 +66,19 @@ struct Frame {
 // Called from the camera's grab thread. Must be fast and must not throw.
 using FrameCallback = std::function<void(const Frame&)>;
 
+enum class CameraEventKind : std::uint8_t {
+    Offline = 1,  // connection lost: the camera object is unusable, close() it and open a new one
+    FrameDropped, // a frame was lost inside the adapter (incomplete, pool exhausted, ...)
+};
+
+struct CameraEvent {
+    CameraEventKind kind{CameraEventKind::FrameDropped};
+    std::string_view detail; // valid only during the callback
+};
+
+// Called from the camera's own threads. Must be fast and must not throw.
+using CameraEventCallback = std::function<void(const CameraEvent&)>;
+
 // Implemented by the Daheng adapter (M30.10) and the replay camera (M30.20).
 // Lifecycle: open() -> applySettings() -> start() -> stop() -> close().
 class ICamera {
@@ -97,6 +110,10 @@ public:
 
     // Requires open. Starts grabbing and calling the frame callback.
     [[nodiscard]] virtual Result<> start() = 0;
+
+    // Optional (default: events are ignored). Set before start(), replaced not appended.
+    // After close() returns, no more events.
+    virtual void setEventCallback(CameraEventCallback /*callback*/) {}
 
     // Stops grabbing. After return, no more callbacks. Safe when not streaming. Must not throw.
     virtual void stop() noexcept = 0;

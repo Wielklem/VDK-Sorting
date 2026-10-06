@@ -178,6 +178,7 @@ public:
         if (!usb3_) {
             tuneGigE();
         }
+        registerOffline();
         return {};
     }
 
@@ -213,6 +214,10 @@ public:
     void close() noexcept override {
         stop();
         if (open_) {
+            if (offlineHandle_ != nullptr) {
+                static_cast<void>(GXUnregisterDeviceOfflineCallback(handle_, offlineHandle_));
+                offlineHandle_ = nullptr;
+            }
             if (const GX_STATUS st = GXCloseDevice(handle_); st != GX_STATUS_SUCCESS) {
                 warn("GXCloseDevice failed, SDK status " + std::to_string(st));
             }
@@ -341,6 +346,12 @@ public:
 
     // Not safe while streaming (the grab thread reads it).
     void setFrameCallback(FrameCallback callback) override { callback_ = std::move(callback); }
+
+
+    // Not safe while streaming (events come from the SDK's threads).
+    void setEventCallback(CameraEventCallback callback) override {
+        eventCallback_ = std::move(callback);
+    }
 
     [[nodiscard]] Result<> start() override {
         if (!open_) {
@@ -503,6 +514,28 @@ private:
             warn(info_.serial + ": frame dropped (" + reason + "), drops so far " +
                  std::to_string(n));
         }
+        emit(CameraEventKind::FrameDropped, reason);
+    }
+
+    void emit(CameraEventKind kind, std::string_view detail) noexcept {
+        try {
+            if (eventCallback_) {
+                eventCallback_(CameraEvent{.kind = kind, .detail = detail});
+            }
+        } catch (...) {
+            // Event handlers must never take the SDK thread down.
+        }
+    }
+
+    // Device offline notification (P20.50). Without it, a lost camera goes unnoticed.
+    void registerOffline() {
+        if (const GX_STATUS st = GXRegisterDeviceOfflineCallback(handle_, this, &onOffline,
+                                                                 &offlineHandle_);
+            st != GX_STATUS_SUCCESS) {
+            offlineHandle_ = nullptr;
+            warn(info_.serial + ": offline callback not registered, SDK status " +
+                 std::to_string(st));
+        }
     }
 
     static void warn(const std::string& message) noexcept {
@@ -591,6 +624,14 @@ private:
         }
     }
 
+    static void GX_STDC onOffline(void* user) {
+        auto* self = static_cast<DahengCamera*>(user);
+        if (self != nullptr) {
+            warn(self->info_.serial + ": device offline");
+            self->emit(CameraEventKind::Offline, "device offline");
+        }
+    }
+
     DahengOptions options_;
     std::shared_ptr<detail::GalaxyLib> lib_;
     GX_DEV_HANDLE handle_{};
@@ -599,6 +640,8 @@ private:
     CameraInfo info_;
     std::uint64_t tickHz_{0};
     FrameCallback callback_;
+    CameraEventCallback eventCallback_;
+    GX_EVENT_CALLBACK_HANDLE offlineHandle_{nullptr};
     std::shared_ptr<FramePool> pool_;
     std::atomic<bool> streaming_{false};
     std::atomic<int> inFlight_{0};

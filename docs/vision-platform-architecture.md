@@ -290,9 +290,9 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P20.10 [BUSY]** Define the `ICamera` interface: open/close, settings (exposure, gain, ROI, trigger mode), start/stop, frame callback, frame metadata.
 - **P20.20 [BUSY]** Build a frame buffer pool: preallocated and ref-counted, so frames can later go to shared memory without copying.
 - **P20.30 [BUSY]** Build the Daheng adapter (M30.10): discovery (USB3 and GigE), open by serial number, hardware trigger on Line0, frame ID and timestamp from the SDK.
-- **P20.35 ** Build "Detect cameras" and GigE IP setup in the app (replaces AutoIPConfigTool): list cameras, flag those outside the NIC subnet, set the IP by MAC address.
-- **P20.35** "Detect cameras" in the app, plus setting the GigE IP from the app. This replaces AutoIPConfigTool by calling the same SDK function, so no external tool is needed.
-- **P20.40** Tune GigE: jumbo frames, packet delay, NIC receive buffers. Write the Ubuntu PC setup checklist.
+- **P20.35 [BUSY]** Build "Detect cameras" and GigE IP setup in the app (replaces AutoIPConfigTool): list cameras, flag those outside the NIC subnet, set the IP by MAC address.
+- **P20.35 [BUSY]** "Detect cameras" in the app, plus setting the GigE IP from the app. This replaces AutoIPConfigTool by calling the same SDK function, so no external tool is needed.
+- **P20.40 [BUSY]** Tune GigE: jumbo frames, packet delay, NIC receive buffers. Write the Ubuntu PC setup checklist.
 - **P20.50** Add camera health handling: auto-reconnect, error counters, frame-ID gap detection.
 - **P20.60** Build the recorder (M30.30): raw frames plus metadata, one folder per session.
 - **P20.70** Build the replay camera (M30.20): plays recordings through `ICamera` at original or adjustable rate, with loop support.

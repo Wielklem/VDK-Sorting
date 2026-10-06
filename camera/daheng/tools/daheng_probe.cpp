@@ -13,6 +13,7 @@
 #include <thread>
 
 #include <vsort/camera/daheng.hpp>
+#include <vsort/camera/resilient_camera.hpp>
 
 namespace {
 
@@ -91,7 +92,7 @@ int main(int argc, char** argv) {
     const double exposureUs = argc > 3 ? std::strtod(argv[3], nullptr) : 10000.0;
     const bool freeRun = argc > 4 && std::string{argv[4]} == "freerun";
 
-    const auto camera = makeDahengCamera();
+    const auto camera = makeResilientCamera([] { return makeDahengCamera(); });
     if (const auto r = camera->open(serial); !r) {
         std::cerr << "open: " << r.error().what() << '\n';
         return 1;
@@ -154,6 +155,11 @@ int main(int argc, char** argv) {
 
     std::cout << count << " frames, " << gaps << " frame-ID gaps, "
               << (seconds > 0 ? double(count) / double(seconds) : 0.0) << " fps average\n";
+    const CameraHealth health = camera->health();
+    std::cout << "health: received " << health.framesReceived << ", dropped "
+              << health.framesDropped << ", ID gaps " << health.idGaps << " ("
+              << health.framesMissed << " missed), reconnects " << health.reconnects << "/"
+              << health.reconnectAttempts << '\n';
     camera->close();
     return 0;
 }
