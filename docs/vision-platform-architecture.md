@@ -287,25 +287,25 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 **Done when:** the service starts and stops cleanly, loads and validates config, and CI is green.
 
 #### P20 Acquisition (M30)
-- **P20.10 [BUSY]** Define the `ICamera` interface: open/close, settings (exposure, gain, ROI, trigger mode), start/stop, frame callback, frame metadata.
-- **P20.20 [BUSY]** Build a frame buffer pool: preallocated and ref-counted, so frames can later go to shared memory without copying.
-- **P20.30 [BUSY]** Build the Daheng adapter (M30.10): discovery (USB3 and GigE), open by serial number, hardware trigger on Line0, frame ID and timestamp from the SDK.
-- **P20.35 [BUSY]** Build "Detect cameras" and GigE IP setup in the app (replaces AutoIPConfigTool): list cameras, flag those outside the NIC subnet, set the IP by MAC address.
-- **P20.35 [BUSY]** "Detect cameras" in the app, plus setting the GigE IP from the app. This replaces AutoIPConfigTool by calling the same SDK function, so no external tool is needed.
-- **P20.40 [BUSY]** Tune GigE: jumbo frames, packet delay, NIC receive buffers. Write the Ubuntu PC setup checklist.
-- **P20.50 [BUSY]** Add camera health handling: auto-reconnect, error counters, frame-ID gap detection.
-- **P20.60 [BUSY]** Build the recorder (M30.30): raw frames plus metadata, one folder per session.
-- **P20.70 [BUSY]** Build the replay camera (M30.20): plays recordings through `ICamera` at original or adjustable rate, with loop support.
-- **P20.80 [BUSY]** Add camera mapping in config: serial number → logical camera ID.
-- **P20.90 [BUSY]** Build a CLI record tool and record initial datasets on the existing machine.
+- **P20.10 [DONE]** Define the `ICamera` interface: open/close, settings (exposure, gain, ROI, trigger mode), start/stop, frame callback, frame metadata.
+- **P20.20 [DONE]** Build a frame buffer pool: preallocated and ref-counted, so frames can later go to shared memory without copying.
+- **P20.30 [DONE]** Build the Daheng adapter (M30.10): discovery (USB3 and GigE), open by serial number, hardware trigger on Line0, frame ID and timestamp from the SDK.
+- **P20.35 [DONE]** Build "Detect cameras" and GigE IP setup in the app (replaces AutoIPConfigTool): list cameras, flag those outside the NIC subnet, set the IP by MAC address.
+- **P20.35 [DONE]** "Detect cameras" in the app, plus setting the GigE IP from the app. This replaces AutoIPConfigTool by calling the same SDK function, so no external tool is needed.
+- **P20.40 [DONE]** Tune GigE: jumbo frames, packet delay, NIC receive buffers. Write the Ubuntu PC setup checklist.
+- **P20.50 [DONE]** Add camera health handling: auto-reconnect, error counters, frame-ID gap detection.
+- **P20.60 [DONE]** Build the recorder (M30.30): raw frames plus metadata, one folder per session.
+- **P20.70 [DONE]** Build the replay camera (M30.20): plays recordings through `ICamera` at original or adjustable rate, with loop support.
+- **P20.80 [DONE]** Add camera mapping in config: serial number → logical camera ID.
+- **P20.90 [DONE]** Build a CLI record tool and record initial datasets on the existing machine.
 
 **Done when:** all cameras grab on the external trigger without drops at target rate, and datasets are recorded.
 
 #### P30 HMI shell + live view (M100, G30)
 - **P30.10 [BUSY]** Design the IPC: a shared-memory ring buffer per camera for preview frames (via `ISharedMemory`, M15), ZeroMQ for commands and events, and a serialization format (FlatBuffers or Protobuf).
 - **P30.20 [BUSY]** Build the service-side IPC server: preview downscaler (configurable fps and resolution) and command handler.
-- **P30.30** Build the HMI skeleton: Qt Quick app, navigation bar, `IPage` plugin loader.
-- **P30.40** Build the design system: colours, typography, standard QML components (buttons, numeric inputs, tables, dialogs).
+- **P30.30 [BUSY]** Build the HMI skeleton: Qt Quick app, navigation bar, `IPage` plugin loader.
+- **P30.40 [BUSY]** Build the design system: colours, typography, standard QML components (buttons, numeric inputs, tables, dialogs).
 - **P30.50** Build the video item: a custom `QQuickItem` that renders frames as GPU textures.
 - **P30.60** Build G30.10 Live view: grid of all cameras, single-camera fullscreen, freeze/unfreeze per camera and for all cameras.
 - **P30.70** Build the overlay layer: ROIs, lane lines and detections drawn over the video.

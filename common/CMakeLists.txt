@@ -22,3 +22,4 @@ if(VSORT_BUILD_TESTS)
 endif()
 
 add_subdirectory(platform)
+add_subdirectory(ipc)

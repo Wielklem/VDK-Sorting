@@ -5,10 +5,14 @@ find_package(unofficial-sqlite3 CONFIG REQUIRED)
 # Everything except main(), so it can be unit-tested.
 add_library(vsort_service_core STATIC
   src/cli.cpp
-  src/service_app.cpp)
+  src/service_app.cpp
+  src/ipc/command_handler.cpp
+  src/ipc/downscale.cpp
+  src/ipc/ipc_server.cpp
+  src/ipc/preview_hub.cpp)
 target_include_directories(vsort_service_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(vsort_service_core
-  PUBLIC vsort::common vsort::platform
+  PUBLIC vsort::common vsort::platform vsort::ipc vsort::camera
   PRIVATE opencv_core opencv_imgproc unofficial::sqlite3::sqlite3)
 if(TARGET cppzmq-static)
   target_link_libraries(vsort_service_core PRIVATE cppzmq-static)

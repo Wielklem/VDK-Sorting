@@ -10,11 +10,13 @@
 #include <sqlite3.h>
 #include <zmq.hpp>
 
+#include <vsort/common/config_store.hpp>
 #include <vsort/common/logging.hpp>
 #include <vsort/common/message_bus.hpp>
 #include <vsort/common/module_registry.hpp>
 #include <vsort/common/version.hpp>
 #include <vsort/platform/paths.hpp>
+#include "ipc/ipc_server.hpp"
 
 namespace vsort::service {
 namespace {
@@ -75,9 +77,18 @@ int runService(const Options& options, platform::IServiceHost& host) {
 
     // 3. Start modules (dependency order; on failure the registry stops what it started)
     MessageBus bus;
+    FileConfigStore configStore{paths->configDir(), bus};
     ModuleContext context{bus};
-    ModuleRegistry registry;  // declared after bus: destroyed before it
+    ModuleRegistry registry;  // declared after bus and configStore: destroyed before them
     // Modules are added here as they are implemented: registry.add(std::make_unique<...>());
+    // The camera module will call IpcServer::preview().submit() and replace NullCameraAccess.
+    if (const auto added = registry.add(std::make_unique<IpcServer>(
+            IpcConfig{}, std::make_unique<NullCameraAccess>(), &configStore));
+        !added) {
+        spdlog::critical("cannot add ipc module: {}", added.error().what());
+        log::shutdown();
+        return kExitFailure;
+    }
     if (const auto started = registry.startAll(context); !started) {
         spdlog::critical("module start failed: {}", started.error().what());
         log::shutdown();

@@ -56,7 +56,7 @@ Topic prefix (first frame) for SUB filtering: `hb`, `cfg`, `diag`, `preview`.
 - PUB/SUB drops messages for slow subscribers by design. State is always re-fetched after reconnect, never rebuilt from missed events.
 
 ## 5. Preview ring buffer
-One shared memory object per camera: `vdk_preview_<camera_id>` (name rules: lowercase `[a-z0-9_]`, mapped to `/vdk_preview_x` on POSIX and `Local\vdk_preview_x` on Windows inside M15 only).
+One shared memory object per camera and generation: `vdk_preview_<camera_id>_<generation>` (name rules: lowercase `[a-z0-9_]`, mapped to `/vdk_preview_x` on POSIX and `Local\vdk_preview_x` on Windows inside M15 only).
 
 Single writer (service), multiple readers (HMI, tools), lock-free.
 
@@ -77,6 +77,7 @@ Rules:
 - Service start: remove stale rings of the same name, then create. Service stop: remove. HMI never creates or unlinks.
 - Memory per ring = slot_count × (slot header + max_width × max_height × bytes_per_pixel); e.g. 4 × 1280×1024 Mono8 ≈ 5.2 MB.
 - Reader polls `write_seq` from a render-timer (display rate). No extra wakeup channel in V1.
+- The generation is part of the name because closing a ring removes its name; a same-name successor would disappear with it. The ring is created on the first preview frame after SetPreview(enabled), so shm_name is empty until the PreviewStreamChanged event arrives. In SetPreview, fps = 0 or max_width = 0 means keep the current value.
 
 ## 6. `ISharedMemory` (implemented in P10.45)
 Minimal surface (sketch):

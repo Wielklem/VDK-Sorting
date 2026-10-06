@@ -1,0 +1,104 @@
+// IPC protocol between the vision service and the HMI (P30.10/P30.20).
+// Rules: only append fields, never reorder or remove (use `deprecated`).
+namespace vsort.ipc.fb;
+
+enum PixelFormat : uint32 { Mono8 = 1, Rgb8 = 2 }
+enum CameraState : uint8 { Closed = 0, Open = 1, Streaming = 2, Reconnecting = 3 }
+enum TriggerMode : uint8 { FreeRun = 1, Software = 2, Hardware = 3 }
+enum ServiceState : uint8 { Unknown = 0, Idle = 1, Running = 2, Fault = 3 }
+
+// Module * 100 + nn. Replies echo the msg_type of their request.
+enum MsgType : uint16 {
+  Heartbeat = 1001,            // MSG-10-01
+  ConfigChanged = 2001,        // MSG-20-01
+  PreviewStreamChanged = 3001, // MSG-30-01
+  Hello = 3010,
+  GetCameraList = 3011,
+  SetPreview = 3012,
+  GetCameraSettings = 3013,
+  SetCameraSettings = 3014,
+  GetConfig = 3015,
+  SetConfig = 3016
+}
+
+table CameraSettings {
+  exposure_us: double;
+  gain_db: double;
+  roi_x: uint32;
+  roi_y: uint32;
+  roi_width: uint32;   // 0 = full sensor
+  roi_height: uint32;  // 0 = full sensor
+  trigger_mode: TriggerMode = Hardware;
+  trigger_rising: bool = true;
+}
+
+table CameraEntry {
+  id: uint16;
+  serial: string;
+  model: string;
+  state: CameraState;
+  preview_enabled: bool;
+  preview_fps: uint16;
+  preview_max_width: uint32;
+  preview_shm_name: string;  // empty until the first preview frame was produced
+  preview_generation: uint32;
+}
+
+// ---- Requests / replies ----
+table HelloRequest { client_protocol_version: uint16; }
+table HelloReply {
+  service_version: string;
+  service_state: ServiceState;
+  uptime_ms: uint64;
+  capabilities: [string];
+}
+table GetCameraListRequest {}
+table CameraListReply { cameras: [CameraEntry]; }
+table SetPreviewRequest {
+  camera_id: uint16;
+  enabled: bool;
+  fps: uint16;
+  max_width: uint32;
+}
+table SetPreviewReply { camera: CameraEntry; }
+table GetCameraSettingsRequest { camera_id: uint16; }
+table CameraSettingsReply { camera_id: uint16; settings: CameraSettings; }
+table SetCameraSettingsRequest { camera_id: uint16; settings: CameraSettings; }
+table GetConfigRequest { module_name: string; }
+table ConfigReply { module_name: string; json: string; version: uint32; }
+table SetConfigRequest { module_name: string; json: string; author: string; }
+
+// ---- Events (PUB/SUB) ----
+table HeartbeatEvent { service_state: ServiceState; uptime_ms: uint64; seq: uint64; }
+table ConfigChangedEvent { module_name: string; version: uint32; }
+table PreviewStreamChangedEvent {
+  camera_id: uint16;
+  shm_name: string;  // empty = stream closed
+  generation: uint32;
+  width: uint32;
+  height: uint32;
+  pixel_format: PixelFormat = Mono8;
+}
+
+union Payload {
+  HelloRequest, HelloReply,
+  GetCameraListRequest, CameraListReply,
+  SetPreviewRequest, SetPreviewReply,
+  GetCameraSettingsRequest, CameraSettingsReply,
+  SetCameraSettingsRequest,
+  GetConfigRequest, ConfigReply, SetConfigRequest,
+  HeartbeatEvent, ConfigChangedEvent, PreviewStreamChangedEvent
+}
+
+table Envelope {
+  protocol_version: uint16;
+  msg_type: uint16;
+  request_id: uint64;   // 0 for events; replies echo the request id
+  timestamp_ns: uint64; // service monotonic clock
+  status: uint16;       // replies: 0 = ok, otherwise vsort::Errc
+  error_text: string;   // replies: UTF-8
+  payload: Payload;
+}
+
+root_type Envelope;
+file_identifier "VDKI";

@@ -6,6 +6,7 @@
     "spdlog",
     "nlohmann-json",
     "cppzmq",
+    "flatbuffers",
     "sqlite3",
     {
       "name": "opencv4",
