@@ -14,6 +14,7 @@ std::string_view toString(Errc code) noexcept {
         case Errc::ValidationFailed: return "validation_failed";
         case Errc::DeviceError:      return "device_error";
         case Errc::Internal:         return "internal";
+        case Errc::PermissionDenied: return "permission_denied";
     }
     return "unknown";
 }
