@@ -280,8 +280,9 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P10.50 [DONE]** Build the message bus: typed publish/subscribe, bounded lock-free queues, drop counters.
 - **P10.60 [DONE]** Build the module framework: `IModule` (init/start/stop/health), module registry, startup and shutdown order.
 - **P10.70 [DONE]** Build the service executable: CLI arguments, stop signals via `IServiceHost` (M15), graceful shutdown.
-- **P10.80 [BUSY]** Build the config store: JSON schema per module, load/validate/save, versioning (ConfigVersion), and the MSG-20-01 change notification.
-- **P10.90 [BUSY]** Set up unit tests for the bus and config store, and add them to CI.
+- **P10.80 [DONE]** Build the config store: JSON schema per module, load/validate/save, versioning (ConfigVersion), and the MSG-20-01 change notification.
+- **P10.90 [DONE]** Set up unit tests for the bus and config store, and add them to CI.
+- **P10.95** Clean up the warnings, disable the intentional checks in .clang-tidy, then set WarningsAsErrors: '*'
 
 **Done when:** the service starts and stops cleanly, loads and validates config, and CI is green.
 
