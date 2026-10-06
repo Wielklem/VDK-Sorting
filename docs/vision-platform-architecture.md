@@ -287,7 +287,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 **Done when:** the service starts and stops cleanly, loads and validates config, and CI is green.
 
 #### P20 Acquisition (M30)
-- **P20.10** Define the `ICamera` interface: open/close, settings (exposure, gain, ROI, trigger mode), start/stop, frame callback, frame metadata.
+- **P20.10 [BUSY]** Define the `ICamera` interface: open/close, settings (exposure, gain, ROI, trigger mode), start/stop, frame callback, frame metadata.
 - **P20.20** Build a frame buffer pool: preallocated and ref-counted, so frames can later go to shared memory without copying.
 - **P20.30** Build the Daheng adapter (M30.10): discovery, open by serial number, hardware trigger on Line0, frame ID and timestamp from the SDK.
 - **P20.40** Tune GigE: jumbo frames, packet delay, NIC receive buffers. Write the Ubuntu PC setup checklist.

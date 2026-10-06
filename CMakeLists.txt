@@ -28,6 +28,7 @@ if(VSORT_BUILD_TESTS)
 endif()
 
 add_subdirectory(common)
+add_subdirectory(camera)
 add_subdirectory(service)
 if(VSORT_BUILD_HMI)
   add_subdirectory(hmi)
