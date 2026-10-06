@@ -126,3 +126,51 @@ TEST(MessageBus, SubscribeWhilePublishing) {
     }
     stop.store(true);
 }
+
+TEST(MessageBus, CapacityRoundsUpToPowerOfTwo) {
+    vsort::MessageBus bus;
+    const auto sub = bus.subscribe<Ping>(3);
+    EXPECT_EQ(sub->capacity(), 4U);
+}
+
+TEST(MessageBus, DrainOnEmptyReturnsZero) {
+    vsort::MessageBus bus;
+    const auto sub = bus.subscribe<Ping>(4);
+    EXPECT_EQ(sub->drain([](const Ping&) {}), 0U);
+}
+
+TEST(MessageBus, PublishWithoutSubscribersIsCountedNotDropped) {
+    vsort::MessageBus bus;
+    EXPECT_EQ(bus.publish(Ping{1}), 0U);
+    EXPECT_EQ(bus.publishedTotal(), 1U);
+    EXPECT_EQ(bus.droppedTotal(), 0U);
+}
+
+TEST(MessageBus, ExpiredSubscribersAreNotCounted) {
+    vsort::MessageBus bus;
+    auto first = bus.subscribe<Ping>(4);
+    const auto second = bus.subscribe<Ping>(4);
+    first.reset();
+    EXPECT_EQ(bus.subscriberCount<Ping>(), 1U);
+    EXPECT_EQ(bus.publish(Ping{1}), 1U);
+}
+
+TEST(MessageBus, ReceivedPlusDroppedEqualsPublishedUnderContention) {
+    constexpr int kPublishers = 4;
+    constexpr int kPerPublisher = 2000;
+
+    vsort::MessageBus bus;
+    auto sub = bus.subscribe<Ping>(64);
+    {
+        std::vector<std::jthread> threads;
+        for (int t = 0; t < kPublishers; ++t) {
+            threads.emplace_back([&bus] {
+                for (int i = 0; i < kPerPublisher; ++i) {
+                    bus.publish(Ping{i});
+                }
+            });
+        }
+    }
+    const auto received = static_cast<std::uint64_t>(sub->drain([](const Ping&) {}));
+    EXPECT_EQ(received + sub->dropped(), static_cast<std::uint64_t>(kPublishers) * kPerPublisher);
+}
