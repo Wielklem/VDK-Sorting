@@ -14,6 +14,8 @@ if(VSORT_WITH_GALAXY)
   add_subdirectory(daheng)
 endif()
 
+add_subdirectory(recorder)
+
 if(VSORT_BUILD_TESTS)
   add_subdirectory(tests)
 endif()
