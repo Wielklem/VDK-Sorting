@@ -103,7 +103,7 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | OS | Ubuntu LTS 24.04 (target); Windows 10/11 x64 (prepared) | [V1] / Windows [LATER] |
 | GUI | Qt 6 LTS, Qt Quick/QML, GPU texture live view | [V1] |
 | IPC | Shared memory (frames) + ZeroMQ (messages) | [V1] |
-| Cameras | Daheng Galaxy C++ SDK (GenICam) | [V1] |
+| Cameras | Daheng Galaxy SDK (C API, GenICam) | [V1] |
 | Vision | OpenCV | [V1] |
 | Inference | ONNX Runtime / TensorRT | [PARTIAL] |
 | Storage | SQLite + image folders | [V1][REDO] → PostgreSQL/TimescaleDB for multi-line |
@@ -288,8 +288,10 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 
 #### P20 Acquisition (M30)
 - **P20.10 [BUSY]** Define the `ICamera` interface: open/close, settings (exposure, gain, ROI, trigger mode), start/stop, frame callback, frame metadata.
-- **P20.20** Build a frame buffer pool: preallocated and ref-counted, so frames can later go to shared memory without copying.
-- **P20.30** Build the Daheng adapter (M30.10): discovery, open by serial number, hardware trigger on Line0, frame ID and timestamp from the SDK.
+- **P20.20 [BUSY]** Build a frame buffer pool: preallocated and ref-counted, so frames can later go to shared memory without copying.
+- **P20.30 [BUSY]** Build the Daheng adapter (M30.10): discovery (USB3 and GigE), open by serial number, hardware trigger on Line0, frame ID and timestamp from the SDK.
+- **P20.35** Build "Detect cameras" and GigE IP setup in the app (replaces AutoIPConfigTool): list cameras, flag those outside the NIC subnet, set the IP by MAC address.
+- **P20.35** "Detect cameras" in the app, plus setting the GigE IP from the app. This replaces AutoIPConfigTool by calling the same SDK function, so no external tool is needed.
 - **P20.40** Tune GigE: jumbo frames, packet delay, NIC receive buffers. Write the Ubuntu PC setup checklist.
 - **P20.50** Add camera health handling: auto-reconnect, error counters, frame-ID gap detection.
 - **P20.60** Build the recorder (M30.30): raw frames plus metadata, one folder per session.
