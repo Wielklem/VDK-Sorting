@@ -1,6 +1,9 @@
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -71,8 +74,7 @@ TEST_F(ConfigStoreTest, RejectsBadNamesBadDefaultsAndDuplicates) {
     EXPECT_EQ(store.registerModule("camera", kSchema, json::object()).error().code,
               Errc::ValidationFailed);
     ASSERT_TRUE(store.registerModule("camera", kSchema, kDefaults).has_value());
-    EXPECT_EQ(store.registerModule("camera", kSchema, kDefaults).error().code,
-              Errc::AlreadyExists);
+    EXPECT_EQ(store.registerModule("camera", kSchema, kDefaults).error().code, Errc::AlreadyExists);
     EXPECT_EQ(store.get("nope").error().code, Errc::NotFound);
 }
 
@@ -147,4 +149,69 @@ TEST_F(ConfigStoreTest, InvalidFileOnDiskIsRejectedNotOverwritten) {
     FileConfigStore again{dir_, bus_};
     EXPECT_EQ(again.registerModule("camera", kSchema, kDefaults).error().code,
               Errc::ValidationFailed);
+}
+
+TEST_F(ConfigStoreTest, UnknownModuleReturnsNotFound) {
+    FileConfigStore store{dir_, bus_};
+    EXPECT_EQ(store.version("nope").error().code, Errc::NotFound);
+    EXPECT_EQ(store.set("nope", kChanged, "t").error().code, Errc::NotFound);
+    EXPECT_EQ(store.history("nope").error().code, Errc::NotFound);
+    EXPECT_EQ(store.rollback("nope", 1U, "t").error().code, Errc::NotFound);
+}
+
+TEST_F(ConfigStoreTest, RejectsUppercaseModuleName) {
+    FileConfigStore store{dir_, bus_};
+    EXPECT_EQ(store.registerModule("Camera", kSchema, kDefaults).error().code,
+              Errc::InvalidArgument);
+}
+
+TEST_F(ConfigStoreTest, CorruptJsonOnDiskIsRejected) {
+    {
+        FileConfigStore store{dir_, bus_};
+        ASSERT_TRUE(store.registerModule("camera", kSchema, kDefaults).has_value());
+    }
+    {
+        std::ofstream out{dir_ / "camera.json", std::ios::binary | std::ios::trunc};
+        out << "{ this is not json";
+    }
+    FileConfigStore again{dir_, bus_};
+    EXPECT_EQ(again.registerModule("camera", kSchema, kDefaults).error().code, Errc::ParseError);
+}
+
+TEST_F(ConfigStoreTest, HistoryIsOldestFirstWithAuthors) {
+    FileConfigStore store{dir_, bus_};
+    ASSERT_TRUE(store.registerModule("camera", kSchema, kDefaults).has_value());
+    ASSERT_TRUE(store.set("camera", kChanged, "wilhelm").has_value());
+    const auto h = store.history("camera");
+    ASSERT_TRUE(h.has_value());
+    ASSERT_EQ(h->size(), 2U);
+    EXPECT_EQ((*h)[0].number, 1U);
+    EXPECT_EQ((*h)[0].author, "default");
+    EXPECT_EQ((*h)[1].number, 2U);
+    EXPECT_EQ((*h)[1].author, "wilhelm");
+}
+
+TEST_F(ConfigStoreTest, ConcurrentSetsAreSerialised) {
+    constexpr int kThreads = 4;
+    constexpr int kPerThread = 25;
+    constexpr int kTotal = kThreads * kPerThread;
+
+    FileConfigStore store{dir_, bus_};
+    ASSERT_TRUE(store.registerModule("camera", kSchema, kDefaults).has_value());
+    const auto sub = bus_.subscribe<ConfigChanged>(256);
+    {
+        std::vector<std::jthread> threads;
+        for (int t = 0; t < kThreads; ++t) {
+            threads.emplace_back([&store, t] {
+                for (int i = 0; i < kPerThread; ++i) {
+                    json value = kDefaults;
+                    value["exposure_us"] = 1000 + (t * 100) + i; // unique per call
+                    EXPECT_TRUE(store.set("camera", value, "t").has_value());
+                }
+            });
+        }
+    }
+    EXPECT_EQ(store.version("camera")->number, static_cast<std::uint32_t>(kTotal) + 1U);
+    EXPECT_EQ(store.history("camera")->size(), static_cast<std::size_t>(kTotal) + 1U);
+    EXPECT_EQ(sub->pending(), static_cast<std::size_t>(kTotal));
 }
