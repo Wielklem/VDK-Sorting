@@ -1,13 +1,17 @@
+#include <QDebug>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
+#include <QVariant>
 #include <QtLogging>
 #include <atomic>
 #include <iostream>
 
 #include <vsort/common/version.hpp>
+#include <vsort/hmi/page_registry.hpp>
+#include <vsort/hmi/plugin_loader.hpp>
 
 namespace {
 
@@ -42,11 +46,22 @@ int main(int argc, char* argv[]) {
         qInstallMessageHandler(selfTestHandler);
     }
 
+    // Declared before the engine so it outlives it.
+    vsort::hmi::PageRegistry registry;
+    if (!gallery) {
+        const auto loaded = vsort::hmi::loadPagePlugins(vsort::hmi::defaultPluginDir(), registry);
+        for (const auto& error : loaded.errors) {
+            qWarning().noquote() << error;
+        }
+    }
+
     QQmlApplicationEngine engine;
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
         [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
-    if (selfTest) {
+    if (!gallery) {
+        engine.setInitialProperties({{QStringLiteral("pages"), QVariant::fromValue(&registry)}});
+    } else if (selfTest) {
         engine.setInitialProperties({{QStringLiteral("selfTest"), true}});
     }
     engine.loadFromModule("VsortHmi", gallery ? "Gallery" : "Main");
