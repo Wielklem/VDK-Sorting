@@ -164,7 +164,7 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | MSG-20-01 | ConfigChanged | [V1] |
 | MSG-30-01 | Frame (ID, camera, timestamp, buffer ref) | [V1] |
 | MSG-30-02 | CameraListChanged (event, no payload) | [V1] |
-| MSG-50-01 | ObjectRecord (cup ID per lane, lane, photos) | [V1][REDO] gains encoder position |
+| MSG-50-01 | ObjectRecord (V1: lane, cup ID, sensor, photo or NO_DATA; one record per sensor and cup) | [V1][REDO] becomes one record per object with all photos and the encoder position |
 | MSG-50-02 | CupCreated / CupMeasurement (lane, cup ID, sensor, key, value or NO_DATA) + snapshot of last 50 cups per lane | [V1] |
 | MSG-60-01 | Measurement | [V1] |
 | MSG-70-01 | Decision | [V1] |
@@ -221,6 +221,32 @@ lines[]: id, name, lanes[]
 - **Defaults.** One line, one lane, four camera sensors (camera 0..3, offset 0, whole image, visible, no measurements).
 - **Hand edits.** Stop the service, edit `data` in `<config dir>/machine.json`, start it again. A hand edit does not create a history version. `SetConfig` over IPC does, but checks only the schema; P50.20 adds a rule check in the store before a GUI editor uses it.
 
+### 40.40 Tracking (M50.10, P40.10–P40.30)
+
+Lives in `service/src/tracking/`.
+
+```
+grab thread → frame sink → TrackingModule::submit() → FrameInbox (metadata only, 256, drop + count)
+tracking thread → FrameSequenceTracker::onFrame() → ObjectRecord (MSG-50-01) → MessageBus
+```
+
+| Part | Responsibility |
+|---|---|
+| `ITracker` | `onFrame` (every frame, one thread), `onTick` (10 Hz, for P40.40), `counters`. M50.20 (encoder) implements the same interface later. |
+| `FrameSequenceTracker` | M50.10: one frame = one cup per camera (hardware trigger). Per sensor a cup counter from 0 at tracking start; lane cup ID = counter − offset (negative: the cup passed sensor 1 before tracking started). Frame-ID gaps ≤ 100 (frames lost after exposure) become NoData cups; a larger jump or a restarted frame ID counts as an ID reset. |
+| Lane crop (P40.20) | Lane ROI (fractions) → pixel rectangle per frame, clamped to the image; Bayer crops on even pixels. `cropFrame()` gives a zero-copy view that keeps the frame's owner. |
+| `TrackingModule` | `IModule` "tracking", depends on "camera". Own thread; publishes the records on the bus; logs the counters every 10 s when they changed. Degraded for 10 s after an inbox drop. A dropped frame shows up as a frame-ID gap, so it becomes a NoData cup. |
+
+V1 shortcuts (compared to the final implementation):
+- **One record per sensor and cup.** ObjectRecord is one sensor's observation; P80.100 assembles the cup from the records with the same lane and cup ID. Final: one object record with all photos and the encoder position (P130).
+- **No pixels in the record.** Only camera, frame ID, timestamps and crop rectangle. The inbox holds metadata only, so tracking never holds camera buffers. How P60 gets the pixels (frames buffered per camera by frame ID, or frames with a bounded lifetime in the inbox) is decided in P60.10.
+- **Counter alignment.** All counters start at 0 at the first frame after tracking start. This is only correct if all cameras start streaming in the same machine step (machine stopped, or started after the service). Until P40.40: start the service before the machine.
+- **Missed triggers are not detected yet.** No frame = no cup, so that sensor's counter falls behind. After a frame-ID reset (camera reconnect) the counter continues with +1; the lost cups are unknown. P40.40 handles both.
+- **Read once.** Tracking reads `machine` and `rois` at start; restart the service after editing them.
+- **Not configurable yet.** Queue size, gap limit (100), tick and log intervals are code defaults; the `tracking` config module comes with P40.40.
+- **Only with cameras.** The module is only added when a camera source is configured (Daheng or replay).
+- **Not on IPC.** ObjectRecord is in `vdk_ipc.fbs` (msg type 5001) but not published; the HMI gets cup updates via MSG-50-02 (P80.100).
+- **Rectangular crops only.** No rotation or perspective correction per lane.
 ---
 
 ## 50. Controller (own PLC/PCB): final version only
@@ -255,7 +281,7 @@ Each page is a QML plugin with tabs. Visibility depends on controller capabiliti
 | **G20 Machine** | G20.10 Lines & lanes [V1] · G20.20 Sensor config [V1] (sensor → lane, kind, offset in cups, measurements, "show in Product Monitor") · G20.25 Machine config [V1] (lanes, sensors per lane, offsets) · G20.30 Tippers [PARTIAL] logical only · G20.40 Recipes [V1] | [V1] |
 | **G30 Cameras** | G30.10 Live view, all cameras, freeze/unfreeze [V1] · G30.20 ROI [V1] · G30.30 Exposure/gain [V1] · G30.40 Calibration px→mm [V1] · G30.50 Record/replay [V1] | [V1] |
 | **G40 Controller** | G40.10 Status [PARTIAL] "no controller" · G40.20 IO mapping [LATER] · G40.30 Connection/firmware [LATER] | [PARTIAL] |
-| **G50 Tracking** | G50.10 Photos per object [V1][REDO] · G50.20 Pitch in frames [V1][REDO] → encoder counts · G50.30 Lane ROIs [V1] · G50.40 Resync [V1][REDO] | [V1][REDO] |
+| **G50 Tracking** | G50.10 Photos per object: not needed (V1 hardware trigger, one frame per cup) · G50.20 Pitch in frames: not needed · G50.30 Lane ROIs [V1] (V1: `roi_id` in the machine config, edited by hand) · G50.40 Resync [LATER] | [PARTIAL] |
 | **G60 Analytics** | G60.10 Pipeline stages [V1] · G60.20 Parameters [V1] · G60.30 Debug overlays [V1] · G60.40 Models [PARTIAL] | [V1] |
 | **G70 Sorting specs** | G70.10 Grades [V1] · G70.20 Rules (size, dirt %, …) [V1] · G70.30 Shadow decisions [V1] · G70.40 Grade → outlet [LATER] | [V1] |
 | **G80 Production** | G80.10 Live batch stats [V1] · G80.20 History [V1] · G80.30 Image browser [V1] · G80.40 Export [PARTIAL] | [V1] |
@@ -272,21 +298,22 @@ Each page is a QML plugin with tabs. Visibility depends on controller capabiliti
 
 | Aspect | V1 (frame-sequence) | Final (encoder) | Status |
 |---|---|---|---|
-| Object identity | Frame count ÷ photos per object | Trigger log → encoder count → cup/roller index | [REDO] |
+| Object identity | Per-sensor frame count: one frame per cup per camera (hardware trigger) | Trigger log → encoder count → cup/roller index | [REDO] |
 | Photo timing | Set in external PLC (not ours) | Trigger plan from GUI (G120.10) | [LATER] |
 | Lane assignment | Fixed ROI per lane | Same | [V1] |
-| Frame loss | Gap detection, mark "untracked" | Gap detection + exact recovery via trigger log | [V1][REDO] |
-| Resync | Image-based (cup/roller edge) | Encoder reference; image-based as check | [V1][REDO] |
+| Frame loss | Frame-ID gaps (exact, P40.30) and missed triggers (timing + cross-sensor check, P40.40) → NoData cups | Gap detection + exact recovery via trigger log | [V1][REDO] |
+| Resync | Cross-sensor consistency check (P40.40); image-based resync deferred (P40.50) | Encoder reference; image-based as check | [V1][REDO] |
 | Eject timing | — | `eject_at_count` = object count + offset + mechanical delay (G120.20) | [LATER] |
 | Late decision | — | Controller applies default action and logs it | [LATER] |
-| Cup creation | Frame count ÷ photos per cup (V1) | Encoder signal creates the cup; all sensor positions derive from it | [V1][REDO] |
+| Cup creation | Per-sensor cup counter (V1); counters aligned at tracking start until P40.40 | Encoder signal creates the cup; all sensor positions derive from it | [V1][REDO] |
 | Sensor offset | Integer cups from the reference sensor, per sensor | Encoder counts, per sensor | [V1][REDO] |
 | Missing data | Cup stays in the table, cell red "no data" | Same | [V1] |
 
 **Assumptions for V1:**
-- Each hardware trigger increments the camera frame ID by exactly one.
-- Photos per object and pitch are constant.
+- Each camera gets one hardware trigger per cup and delivers one frame per trigger. A missed trigger gives no frame and does not advance the frame ID.
+- The frame ID only jumps for frames lost after exposure (transport); those are counted exactly.
 - Lanes are separated by fixed ROIs.
+- No machine-state signal and no encoder: speed changes, stops and starts are detected from frame timing (P40.40).
 
 ---
 
@@ -373,12 +400,12 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 **Done when:** live view of all cameras is smooth, and a GUI crash or restart does not affect the service.
 
 #### P40 Object tracking (M50.10, G50) [V1][REDO]
-- **P40.10** Define the `ITracker` interface and the ObjectRecord message (MSG-50-01).
-- **P40.20** Split lane ROIs: frame → per-lane crops.
-- **P40.30** Build the frame-sequence tracker: frame count → object sequence number and photo index (photos per object, pitch).
-- **P40.40** Add gap detection: frame-ID or timestamp gaps mark affected cups as NO_DATA per sensor (shown red in the Product Monitor).
-- **P40.50** Add image-based resync: detect the cup or roller edge and correct the phase.
-- **P40.60** Build the G50 Tracking page: settings plus a live overlay of object IDs on the images.
+- **P40.10 [PARTIALLY_DONE]** Define the `ITracker` interface and the ObjectRecord message (MSG-50-01), see section 40.40.
+- **P40.20 [PARTIALLY_DONE]** Split lane ROIs: frame → per-lane crop rectangle and zero-copy view (one lane in V1).
+- **P40.30 [PARTIALLY_DONE]** Build the frame-sequence tracker as module "tracking". The V1 hardware trigger gives one frame per cup per camera, so a per-sensor cup counter replaces "photos per object / pitch". Frame-ID gaps become NoData cups.
+- **P40.40** Add miss detection and speed handling: missed triggers from frame timing (each camera's own clock, trend-predicted interval, machine states Stopped/Starting/Running), cross-sensor consistency check and counter alignment, `tracking` config module. Tests with synthetic timestamp sequences.
+- **P40.50 [LATER]** Add image-based resync: detect the cup or roller edge and correct the phase. Deferred: the cross-sensor check of P40.40 covers V1.
+- **P40.60 [LATER]** Build the G50 Tracking page: settings plus a live overlay of object IDs on the images. Deferred until after the first Product Monitor release.
 - **P40.70** Test with replay datasets, including artificially dropped frames.
 
 **Done when:** replayed sets map to the correct objects and dropped frames are flagged.
@@ -566,6 +593,8 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 | Frame sinks (M30.50) | Frames go from the camera module to the preview hub by direct callback, not over the message bus (principle 5) | MSG-30-01 on the bus once the pipeline (P40, P60) consumes frames |
 | Cup creation (frame count) | Not encoder based | Encoder-created cups (P130.35) |
 | Sensor offset (cups) | Cups, not encoder counts | Encoder counts (P130.35) |
+| ObjectRecord per sensor (P40.10) | One record per sensor and cup, no pixels | One record per object with all photos and the encoder position (P130); pixel access decided in P60.10 |
+| Cup counters (P40.30) | Aligned at tracking start; wrong if cameras start in different machine steps | Step alignment (P40.40), later encoder (P130) |
 
 Everything else is built once and only extended.
 

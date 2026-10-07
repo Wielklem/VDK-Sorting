@@ -19,7 +19,8 @@ enum MsgType : uint16 {
   GetCameraSettings = 3013,
   SetCameraSettings = 3014,
   GetConfig = 3015,
-  SetConfig = 3016
+  SetConfig = 3016,
+  ObjectRecord = 5001          // MSG-50-01 (not published yet)
 }
 
 table CameraSettings {
@@ -84,6 +85,27 @@ table PreviewStreamChangedEvent {
 // The camera list or a camera state changed: ask GetCameraList again.
 table CameraListChangedEvent {}
 
+// ---- Tracking (P40.10) ----
+enum PhotoStatus : uint8 { Ok = 1, NoData = 2 }
+
+// MSG-50-01 (V1): one sensor's observation of one cup. Frame fields only for status Ok.
+// [REDO] P130 adds the encoder position.
+table ObjectRecord {
+  lane_id: uint16;
+  cup_id: int64;          // lane cup ID = sensor_count - sensor offset; < 0 = passed before start
+  sensor_id: uint16;
+  sensor_count: uint64;   // cups counted at this sensor since tracking start
+  status: PhotoStatus = NoData;
+  camera_id: uint16;
+  frame_id: uint64;
+  host_timestamp_ns: uint64;
+  device_timestamp_ns: uint64; // camera clock, 0 if unavailable
+  crop_x: uint32;         // lane crop in frame pixels
+  crop_y: uint32;
+  crop_width: uint32;
+  crop_height: uint32;
+}
+
 union Payload {
 
   HelloRequest, HelloReply,
@@ -92,7 +114,8 @@ union Payload {
   GetCameraSettingsRequest, CameraSettingsReply,
   SetCameraSettingsRequest,
   GetConfigRequest, ConfigReply, SetConfigRequest,
-  HeartbeatEvent, ConfigChangedEvent, PreviewStreamChangedEvent, CameraListChangedEvent
+  HeartbeatEvent, ConfigChangedEvent, PreviewStreamChangedEvent, CameraListChangedEvent,
+  ObjectRecord
 
 }
 

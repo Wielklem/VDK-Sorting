@@ -25,6 +25,7 @@
 #include "camera/camera_module.hpp"
 #include "camera/replay_backend.hpp"
 #include "ipc/ipc_server.hpp"
+#include "tracking/tracking_module.hpp"
 #ifdef VSORT_WITH_GALAXY
 #include "camera/daheng_backend.hpp"
 #endif
@@ -208,6 +209,16 @@ int runService(const Options& options, platform::IServiceHost& host) {
             log::shutdown();
             return kExitFailure;
         }
+        // Tracking (P40.30): a second frame sink. It only enqueues metadata, so it stays fast.
+        auto tracking = std::make_unique<TrackingModule>(&configStore);
+        TrackingModule* trackingModule = tracking.get();
+        if (const auto added = registry.add(std::move(tracking)); !added) {
+            spdlog::critical("cannot add tracking module: {}", added.error().what());
+            log::shutdown();
+            return kExitFailure;
+        }
+        cameras->addFrameSink(
+            [trackingModule](const camera::Frame& frame) { trackingModule->submit(frame); });
     }
     if (const auto started = registry.startAll(context); !started) {
         spdlog::critical("module start failed: {}", started.error().what());

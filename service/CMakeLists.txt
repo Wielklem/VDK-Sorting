@@ -11,7 +11,10 @@ add_library(vsort_service_core STATIC
   src/ipc/command_handler.cpp
   src/ipc/downscale.cpp
   src/ipc/ipc_server.cpp
-  src/ipc/preview_hub.cpp)
+  src/ipc/preview_hub.cpp
+  src/tracking/frame_sequence_tracker.cpp
+  src/tracking/lane_crop.cpp
+  src/tracking/tracking_module.cpp)
 target_include_directories(vsort_service_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(vsort_service_core
   PUBLIC vsort::common vsort::platform vsort::ipc vsort::camera vsort::replay
