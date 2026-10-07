@@ -1,6 +1,9 @@
 #include "tracking/tracking_module.hpp"
 
+#include <array>
+#include <fstream>
 #include <string>
+#include <system_error>
 #include <utility>
 
 #include <spdlog/spdlog.h>
@@ -9,6 +12,7 @@
 #include <vsort/common/roi_config.hpp>
 
 #include "tracking/frame_sequence_tracker.hpp"
+#include "tracking/tracking_config.hpp"
 
 namespace vsort::service {
 
@@ -45,9 +49,46 @@ TrackingModule::~TrackingModule() {
     stop();
 }
 
+void TrackingModule::loadState() {
+    std::error_code ec;
+    if (options_.stateFile.empty() || !std::filesystem::exists(options_.stateFile, ec)) {
+        return;
+    }
+    std::ifstream in{options_.stateFile, std::ios::binary};
+    const auto state = nlohmann::json::parse(in, nullptr, false);
+    if (state.is_discarded()) {
+        spdlog::warn("tracking: ignoring unreadable {}", options_.stateFile.generic_string());
+        return;
+    }
+    tracker_->restoreState(state);
+}
+
+// Write to <file>.tmp, then rename: a crash never leaves a half-written file.
+void TrackingModule::saveState() const {
+    if (options_.stateFile.empty() || !tracker_) {
+        return;
+    }
+    auto tmp = options_.stateFile;
+    tmp += ".tmp";
+    {
+        std::ofstream out{tmp, std::ios::binary | std::ios::trunc};
+        out << tracker_->state().dump(2) << '\n';
+        if (!out) {
+            spdlog::warn("tracking: cannot write {}", tmp.generic_string());
+            return;
+        }
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, options_.stateFile, ec);
+    if (ec) {
+        spdlog::warn("tracking: cannot save state: {}", ec.message());
+    }
+}
+
 Result<> TrackingModule::init(ModuleContext& context) {
     bus_ = &context.bus;
     if (tracker_) {
+        loadState();
         return {};
     }
     if (config_ == nullptr) {
@@ -57,10 +98,15 @@ Result<> TrackingModule::init(ModuleContext& context) {
     if (!machine) {
         return std::unexpected{std::move(machine.error())};
     }
+    auto options = loadTrackingOptions(*config_);
+    if (!options) {
+        return std::unexpected{std::move(options.error())};
+    }
     const auto rois = config_->get(kRoiModule);
     auto sensors = makeTrackedSensors(*machine, rois ? *rois : nlohmann::json::object());
     spdlog::info("tracking: {} sensor(s), queue {} frames", sensors.size(), inbox_.capacity());
-    tracker_ = std::make_unique<FrameSequenceTracker>(std::move(sensors));
+    tracker_ = std::make_unique<FrameSequenceTracker>(std::move(sensors), *options);
+    loadState();
     return {};
 }
 
@@ -78,6 +124,10 @@ void TrackingModule::stop() noexcept {
     if (thread_.joinable()) {
         thread_.request_stop();
         thread_.join();
+        try {
+            saveState();
+        } catch (...) { // NOLINT(bugprone-empty-catch): stop() must not throw
+        }
     }
 }
 
@@ -108,9 +158,13 @@ void TrackingModule::logCounters() {
     }
     std::string line;
     for (const auto& c : counters) {
+        constexpr std::array<const char*, 3> kPhase{"silent", "starting", "running"};
         line += " | L" + std::to_string(c.laneId) + "/S" + std::to_string(c.sensorId) + " cam" +
-                std::to_string(c.cameraId) + ": " + std::to_string(c.count) + " cups, " +
-                std::to_string(c.noData) + " no data, " + std::to_string(c.idResets) + " id resets";
+                std::to_string(c.cameraId) + " " + kPhase.at(static_cast<std::size_t>(c.phase)) +
+                ": " + std::to_string(c.count) + " cups, " + std::to_string(c.noData) +
+                " no data, " + std::to_string(c.timingMisses) + " missed, " +
+                std::to_string(c.repairs) + " repairs, " + std::to_string(c.extraFrames) +
+                " extra, " + std::to_string(c.idResets) + " id resets";
     }
     spdlog::info("tracking{} | inbox dropped {}", line, inbox_.dropped());
     lastLogged_ = std::move(counters);
@@ -145,6 +199,7 @@ void TrackingModule::run(const std::stop_token& stop) {
         }
         if (now >= nextLog) {
             logCounters();
+            saveState(); // learned phases survive a crash too
             nextLog = now + options_.logInterval;
         }
         if (handled == 0) {

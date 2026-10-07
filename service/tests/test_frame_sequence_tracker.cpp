@@ -28,7 +28,7 @@ camera::FrameMetadata meta(std::uint16_t camera, std::uint64_t frameId) {
     m.cameraIndex = camera;
     m.frameId = FrameId{frameId};
     m.hostTimestamp = Timestamp{std::chrono::milliseconds{100 * frameId}};
-    m.deviceTimestampNs = 1000 * frameId;
+    m.deviceTimestampNs = (100'000'000 * frameId) + (7'000U * camera); // 10 cups/s, own clock
     m.width = 1000;
     m.height = 500;
     return m;
@@ -56,7 +56,7 @@ TEST(FrameSequenceTracker, OneFrameIsOneCup) {
             EXPECT_EQ(r.sensorCount, f - 50);
             EXPECT_EQ(r.cupId, static_cast<std::int64_t>(f - 50) - (3 * cam));
             EXPECT_EQ(r.frameId, FrameId{f});
-            EXPECT_EQ(r.deviceTimestampNs, 1000 * f);
+            EXPECT_EQ(r.deviceTimestampNs, (100'000'000 * f) + (7'000U * cam));
             EXPECT_EQ(r.crop.width, 1000U);
         }
     }
@@ -83,7 +83,9 @@ TEST(FrameSequenceTracker, FrameIdGapGivesNoDataCups) {
 }
 
 TEST(FrameSequenceTracker, ResetAndHugeGapDoNotFlood) {
-    FrameSequenceTracker t{oneLane(), {.maxGapFill = 5}};
+    FrameSequenceOptions options;
+    options.timing.maxGapFill = 5;
+    FrameSequenceTracker t{oneLane(), options};
     ASSERT_EQ(feed(t, 0, 100).size(), 1U);
     ASSERT_EQ(feed(t, 0, 3).size(), 1U);    // camera restarted its counter
     ASSERT_EQ(feed(t, 0, 1000).size(), 1U); // jump larger than maxGapFill
