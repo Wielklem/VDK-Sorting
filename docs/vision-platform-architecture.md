@@ -240,13 +240,41 @@ tracking thread → FrameSequenceTracker::onFrame() → ObjectRecord (MSG-50-01)
 V1 shortcuts (compared to the final implementation):
 - **One record per sensor and cup.** ObjectRecord is one sensor's observation; P80.100 assembles the cup from the records with the same lane and cup ID. Final: one object record with all photos and the encoder position (P130).
 - **No pixels in the record.** Only camera, frame ID, timestamps and crop rectangle. The inbox holds metadata only, so tracking never holds camera buffers. How P60 gets the pixels (frames buffered per camera by frame ID, or frames with a bounded lifetime in the inbox) is decided in P60.10.
-- **Counter alignment.** All counters start at 0 at the first frame after tracking start. This is only correct if all cameras start streaming in the same machine step (machine stopped, or started after the service). Until P40.40: start the service before the machine.
-- **Missed triggers are not detected yet.** No frame = no cup, so that sensor's counter falls behind. After a frame-ID reset (camera reconnect) the counter continues with +1; the lost cups are unknown. P40.40 handles both.
-- **Read once.** Tracking reads `machine` and `rois` at start; restart the service after editing them.
-- **Not configurable yet.** Queue size, gap limit (100), tick and log intervals are code defaults; the `tracking` config module comes with P40.40.
+- **Counting and misses.** See section 40.45 (P40.40).
+- **Read once.** Tracking reads `machine`, `rois` and `tracking` at start; restart the service after editing them.
+- **Queue and intervals in code.** Queue size (256), tick (100 ms) and log interval (10 s) are code defaults; all thresholds are in the `tracking` config module.
 - **Only with cameras.** The module is only added when a camera source is configured (Daheng or replay).
 - **Not on IPC.** ObjectRecord is in `vdk_ipc.fbs` (msg type 5001) but not published; the HMI gets cup updates via MSG-50-02 (P80.100).
 - **Rectangular crops only.** No rotation or perspective correction per lane.
+
+### 40.45 Miss detection and speed handling (M50.10, P40.40)
+
+V1 machine: 10 cups/s nominal, start and stop ramps of 1–5 s, emergency stop possible, every camera has its own trigger, no signal from the machine.
+
+```
+frame → CameraTiming (per camera, own clock) → decisions: Ok, misses before it, extra, or held
+      → per sensor of that camera: LaneConsistency → cup index (+ correction) → ObjectRecords
+```
+
+| Part | Rule |
+|---|---|
+| Camera timing | Own clock: device timestamp (ns), host time if the camera has none. Intervals are never compared between cameras. Prediction: straight-line fit over the last 8 single-cup intervals, so ramps are followed. States per camera: Silent → Starting → Running; Silent after max(1 s, 5 × interval) without frames. |
+| Missed triggers | Running only. Interval ≥ 1.5 × prediction → k = round(interval / prediction) cups. Accepted only if the NEXT interval matches the prediction within 30 % (speed unchanged); otherwise it was a pause: nothing inserted, back to Starting. More than 5 suspected misses = a stop. The frame is held until the next frame or the stop timeout. |
+| Double triggers | Running only: interval < 0.5 × prediction → frame dropped and counted. |
+| Starting | After a stop or a reconnect: one cup per frame, no insertion, until 4 intervals fit a straight line within 20 %. The interval spanning a stop is not used. |
+| Cross-sensor check | Steady cameras only (last intervals within 10 % of their mean), so it pauses during ramps. Each sensor's count at the same host moment (extrapolated with its interval) minus its learned phase. Majority vote; a tie goes to the most upstream sensor. Off by a whole cup twice in a row → counter corrected, and that sensor's cups since its last agreement (max 50) become NoData. Off by a non-whole amount 10 times in a row → phase re-learned. |
+| Phase convention | The first steady sensor anchors the lane. Every other sensor gets a phase within ±0.5 cup of it; the whole-cup part is corrected (camera started in another machine step). Phases are saved in `<data dir>/tracking_state.json` every 10 s and at stop, and reused at start, so the cup numbering is the same after a service restart. A saved phase that no longer fits is ignored and re-learned. Sensor offsets (machine config) are calibrated against this numbering. |
+| Corrections | A later ObjectRecord for the same lane, cup and sensor replaces the earlier one; P80.100 must upsert. |
+| Config | Module `tracking`: 17 thresholds, all relative to measured intervals, none per speed. Defaults as above. |
+
+V1 shortcuts (compared to the final implementation):
+- **Simultaneous errors.** Two sensors failing undetected at the same moment (2 vs 2) can make the check correct the wrong pair. Stress test: no errors at a 0.2 % miss rate, 5 of 1200 runs at 1 %.
+- **Misses during ramps** are found only when the speed is steady again; up to 50 cups of that sensor are then marked NoData.
+- **Start-up.** The first cups of a sensor that needs alignment at start become NoData.
+- **Without `tracking_state.json`** a sensor whose phase is about half a cup from the anchor can be numbered one cup differently than in an earlier run.
+- **Latency.** USB/GigE latency is part of the learned phase; it drifts with speed and is followed only at steady speed.
+- **Single-sensor lanes** get timing-based detection only.
+- **P40.70 (replay test with dropped frames)** stays open until a 4-camera recording with a start and a stop exists; synthetic tests cover the logic.
 ---
 
 ## 50. Controller (own PLC/PCB): final version only
@@ -305,7 +333,7 @@ Each page is a QML plugin with tabs. Visibility depends on controller capabiliti
 | Resync | Cross-sensor consistency check (P40.40); image-based resync deferred (P40.50) | Encoder reference; image-based as check | [V1][REDO] |
 | Eject timing | — | `eject_at_count` = object count + offset + mechanical delay (G120.20) | [LATER] |
 | Late decision | — | Controller applies default action and logs it | [LATER] |
-| Cup creation | Per-sensor cup counter (V1); counters aligned at tracking start until P40.40 | Encoder signal creates the cup; all sensor positions derive from it | [V1][REDO] |
+| Cup creation | Per-sensor cup counter, aligned and repaired by the cross-sensor check (P40.40) | Encoder signal creates the cup; all sensor positions derive from it | [V1][REDO] |
 | Sensor offset | Integer cups from the reference sensor, per sensor | Encoder counts, per sensor | [V1][REDO] |
 | Missing data | Cup stays in the table, cell red "no data" | Same | [V1] |
 
@@ -403,10 +431,10 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P40.10 [PARTIALLY_DONE]** Define the `ITracker` interface and the ObjectRecord message (MSG-50-01), see section 40.40.
 - **P40.20 [PARTIALLY_DONE]** Split lane ROIs: frame → per-lane crop rectangle and zero-copy view (one lane in V1).
 - **P40.30 [PARTIALLY_DONE]** Build the frame-sequence tracker as module "tracking". The V1 hardware trigger gives one frame per cup per camera, so a per-sensor cup counter replaces "photos per object / pitch". Frame-ID gaps become NoData cups.
-- **P40.40** Add miss detection and speed handling: missed triggers from frame timing (each camera's own clock, trend-predicted interval, machine states Stopped/Starting/Running), cross-sensor consistency check and counter alignment, `tracking` config module. Tests with synthetic timestamp sequences.
+- **P40.40 [PARTIALLY_DONE]** Add miss detection and speed handling (section 40.45): per-camera timing on its own clock with confirmation by the next interval, double-trigger filter, cross-sensor check with majority vote and counter repair, phases kept across restarts, `tracking` config module. Tests with synthetic trigger sequences (ramps, emergency stop, misses, jitter, outages).
 - **P40.50 [LATER]** Add image-based resync: detect the cup or roller edge and correct the phase. Deferred: the cross-sensor check of P40.40 covers V1.
 - **P40.60 [LATER]** Build the G50 Tracking page: settings plus a live overlay of object IDs on the images. Deferred until after the first Product Monitor release.
-- **P40.70** Test with replay datasets, including artificially dropped frames.
+- **P40.70** Test with replay datasets, including artificially dropped frames. Open: needs a recording of all 4 cameras on hardware trigger with a start and a stop (open point 8).
 
 **Done when:** replayed sets map to the correct objects and dropped frames are flagged.
 
@@ -594,7 +622,8 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 | Cup creation (frame count) | Not encoder based | Encoder-created cups (P130.35) |
 | Sensor offset (cups) | Cups, not encoder counts | Encoder counts (P130.35) |
 | ObjectRecord per sensor (P40.10) | One record per sensor and cup, no pixels | One record per object with all photos and the encoder position (P130); pixel access decided in P60.10 |
-| Cup counters (P40.30) | Aligned at tracking start; wrong if cameras start in different machine steps | Step alignment (P40.40), later encoder (P130) |
+| Miss detection (P40.40) | Timing plus cross-sensor vote; two sensors failing at the same moment cannot be resolved; repairs mark up to 50 cups NoData | Trigger log + encoder give exact cup positions (P130) |
+| Cup numbering (P40.40) | Learned phase per sensor (fraction of a cup) in `tracking_state.json` | Encoder counts per sensor (P130.35) |
 
 Everything else is built once and only extended.
 
@@ -611,3 +640,4 @@ Everything else is built once and only extended.
 | 5 | Own controller: PLC (Beckhoff/Siemens) or self-built PCB | P110 |
 | 6 | Data retention: which images to keep and for how long | P80 |
 | 7 | Will the customer require Windows, and from which release? | P220 |
+| 8 | Recording of all 4 cameras on hardware trigger, including a start and a stop | P40.70 |

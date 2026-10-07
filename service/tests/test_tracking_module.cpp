@@ -1,5 +1,6 @@
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <thread>
 
@@ -10,6 +11,7 @@
 
 #include "test_ipc_util.hpp"
 #include "tracking/frame_sequence_tracker.hpp"
+#include "tracking/tracking_config.hpp"
 #include "tracking/tracking_module.hpp"
 
 using namespace vsort;
@@ -102,4 +104,48 @@ TEST(TrackingModule, InitFailsWithoutConfig) {
     TrackingModule module{static_cast<const IConfigStore*>(nullptr)};
     EXPECT_FALSE(module.init(context).has_value());
     module.stop(); // safe after a failed init
+}
+
+TEST(TrackingConfig, DefaultsRoundTrip) {
+    EXPECT_TRUE(validateJson(trackingSchema(), trackingDefaults()).has_value());
+    auto json = trackingDefaults();
+    json["miss_factor"] = 1.8;
+    json["mark_limit"] = 20;
+    const auto options = trackingOptionsFromJson(json);
+    ASSERT_TRUE(options.has_value()) << options.error().what();
+    EXPECT_DOUBLE_EQ(options->timing.missFactor, 1.8);
+    EXPECT_EQ(options->markLimit, 20U);
+    EXPECT_EQ(trackingOptionsToJson(*options), json);
+    json["miss_factor"] = 0.9; // below the schema minimum
+    EXPECT_FALSE(trackingOptionsFromJson(json).has_value());
+}
+
+TEST(TrackingModule, KeepsLearnedPhasesInTheStateFile) {
+    const auto dir = std::filesystem::temp_directory_path() / "vsort_tracking_state_test";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto file = dir / "tracking_state.json";
+    const auto saved = nlohmann::json::parse(
+        R"({"lanes": [{"lane_id": 1, "sensors": [{"sensor_id": 2, "phase": 0.25}]}]})");
+    {
+        std::ofstream out{file};
+        out << saved.dump();
+    }
+    {
+        std::vector<TrackedSensor> sensors{
+            {.laneId = 1, .sensorId = 1, .cameraId = 0, .offsetCups = 0, .roi = {}},
+            {.laneId = 1, .sensorId = 2, .cameraId = 1, .offsetCups = 0, .roi = {}}};
+        TrackingModule module{std::make_unique<FrameSequenceTracker>(sensors),
+                              TrackingOptions{.stateFile = file}};
+        MessageBus bus;
+        ModuleContext context{bus};
+        ASSERT_TRUE(module.init(context).has_value());
+        ASSERT_TRUE(module.start().has_value());
+        module.stop(); // writes the state: nothing learned, so the stored phase is kept
+    }
+    std::ifstream in{file};
+    const auto written = nlohmann::json::parse(in, nullptr, false);
+    ASSERT_FALSE(written.is_discarded());
+    EXPECT_EQ(written, saved);
+    std::filesystem::remove_all(dir);
 }

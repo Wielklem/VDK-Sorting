@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <thread>
@@ -52,6 +53,7 @@ struct TrackingOptions {
     std::size_t queueCapacity{256};
     std::chrono::milliseconds tickInterval{100};
     std::chrono::seconds logInterval{10};
+    std::filesystem::path stateFile; // learned phases; empty = not kept (IPaths::dataDir())
 };
 
 // IModule "tracking" (M50, P40.30). Frames come in through submit() (a camera frame sink); the
@@ -92,6 +94,8 @@ private:
     void run(const std::stop_token& stop);
     void publish(std::vector<ObjectRecord>& records);
     void logCounters();
+    void loadState();
+    void saveState() const;
 
     const IConfigStore* config_{nullptr};
     TrackingOptions options_;

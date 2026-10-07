@@ -11,7 +11,8 @@ add_executable(vsort_service_tests
   test_preview_hub.cpp
   test_frame_sequence_tracker.cpp
   test_lane_crop.cpp
-  test_tracking_module.cpp)
+  test_tracking_module.cpp
+  test_speed_handling.cpp)
 target_link_libraries(vsort_service_tests PRIVATE vsort_service_core GTest::gtest_main)
 if(TARGET cppzmq-static)
   target_link_libraries(vsort_service_tests PRIVATE cppzmq-static)
