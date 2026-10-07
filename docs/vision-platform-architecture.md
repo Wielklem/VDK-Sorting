@@ -200,6 +200,27 @@ Rules:
 - **Change events.** Changes of the camera list or of a camera state are announced with the event `CameraListChanged` (MSG-30-02). The HMI then fetches the list again.
 - **Open limits.** The camera map is read once at start (editing it at runtime comes with G20.20). The HMI settings page does not edit trigger mode yet.
 
+### 40.30 Machine model (M20, P50.10)
+
+Config module `machine` (`common/include/vsort/common/machine_config.hpp`). V1 edits it by hand as JSON; the GUI editors come with P50.40/P50.50.
+
+```
+lines[]: id, name, lanes[]
+  lanes[]: id, name, sensors[]            (sensors upstream first)
+    sensors[]: id, name, kind ("camera"), camera_id, roi_id, offset_cups,
+               show_in_monitor, measurements[]: key, label, unit
+```
+
+- **IDs.** Line, lane and sensor IDs are 1..65535 and unique in the whole machine, so a lane ID alone identifies a lane in IPC messages and in the Product Monitor.
+- **Cameras.** `camera_id` is the logical ID from `camera_map`. One camera may serve several lanes (one ROI per lane), but appears only once per lane.
+- **Offsets.** Lane cup ID = sensor cup counter − `offset_cups`. Sensors are listed upstream first and `offset_cups` never decreases along the lane; "most upstream" means first in the list.
+- **Lane ROI.** `roi_id` is a ROI of that camera in `rois`; 0 means the whole image. A ROI that does not exist is a warning at start, not an error.
+- **Measurements.** `key` uses a-z, 0-9, '_' and is unique per sensor; `label` is the column header; `unit` may be empty. An empty catalog means the sensor only has its photo column.
+- **show_in_monitor.** false hides the sensor's columns in G140.10.
+- **Validation.** The store checks the schema; `MachineConfig::fromJson` checks the basic rules above and reports every violation. The service does not start with an invalid machine config. Further rules come with P50.20.
+- **Defaults.** One line, one lane, four camera sensors (camera 0..3, offset 0, whole image, visible, no measurements).
+- **Hand edits.** Stop the service, edit `data` in `<config dir>/machine.json`, start it again. A hand edit does not create a history version. `SetConfig` over IPC does, but checks only the schema; P50.20 adds a rule check in the store before a GUI editor uses it.
+
 ---
 
 ## 50. Controller (own PLC/PCB): final version only
@@ -363,7 +384,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 **Done when:** replayed sets map to the correct objects and dropped frames are flagged.
 
 #### P50 Machine configuration (M20, G20) [PARTIAL]
-- **P50.10** Define the machine model schema: machine → lines → lanes → sensors (camera or other, `ISensor`) → tippers (logical). Per sensor: lane, offset in cups, measurement catalog (key, label, unit), visible flag. Analysis stages declare the measurements they produce.
+- **P50.10 [PARTIALLY_DONE]** Define the machine model schema (config module `machine`, section 40.30): lines → lanes → sensors. Per sensor: camera, lane ROI, offset in cups, measurement catalog (key, label, unit), "show in Product Monitor" flag. V1 config: one lane with 4 camera sensors. Other sensor kinds (`ISensor`) and tippers are added to the schema later (P50.60); analysis stages (P60) fill the measurement catalog.
 - **P50.20** Add validation rules: unique IDs, every lane has a camera, no orphan ROIs.
 - **P50.30** Define the recipe model (sorting specs + analytics + tracking parameters), versioned.
 - **P50.40** Build the G20.10 lines and lanes editor.

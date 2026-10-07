@@ -8,7 +8,8 @@ add_library(vsort_common STATIC
   src/logging.cpp
   src/module_registry.cpp
   src/config_store.cpp
-  src/roi_config.cpp)
+  src/roi_config.cpp
+  src/machine_config.cpp)
 add_library(vsort::common ALIAS vsort_common)
 
 target_include_directories(vsort_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

@@ -16,6 +16,7 @@
 #include <vsort/common/logging.hpp>
 #include <vsort/common/message_bus.hpp>
 #include <vsort/common/module_registry.hpp>
+#include <vsort/common/machine_config.hpp>
 #include <vsort/common/roi_config.hpp>
 #include <vsort/common/version.hpp>
 #include <vsort/platform/paths.hpp>
@@ -80,6 +81,31 @@ Result<> registerCameraConfig(IConfigStore& store) {
     return camera::registerCameraSettings(store);
 }
 
+// P50.10: the service does not start with an invalid machine model. A ROI that is not drawn
+// yet is only a warning.
+Result<> setUpMachineConfig(IConfigStore& store) {
+    if (auto registered = registerMachineConfig(store); !registered) {
+        return registered;
+    }
+    const auto machine = loadMachineConfig(store);
+    if (!machine) {
+        return std::unexpected{machine.error()};
+    }
+    const auto lanes = machine->lanes();
+    std::size_t sensors = 0;
+    for (const auto* lane : lanes) {
+        sensors += lane->sensors.size();
+    }
+    spdlog::info("machine: {} line(s), {} lane(s), {} sensor(s)", machine->lines().size(),
+                 lanes.size(), sensors);
+    if (const auto rois = store.get(kRoiModule); rois) {
+        if (const auto refs = checkRoiReferences(*machine, *rois); !refs) {
+            spdlog::warn("machine config: {}", refs.error().message);
+        }
+    }
+    return {};
+}
+
 // Polls module health. A Failed module means the service cannot do its job: stop.
 
 bool anyModuleFailed(const ModuleRegistry& registry) {
@@ -132,6 +158,11 @@ int runService(const Options& options, platform::IServiceHost& host) {
     ModuleContext context{bus};
     if (const auto roiConfig = registerRoiConfig(configStore); !roiConfig) {
         spdlog::critical("cannot register ROI config: {}", roiConfig.error().what());
+        log::shutdown();
+        return kExitFailure;
+    }
+    if (const auto machineConfig = setUpMachineConfig(configStore); !machineConfig) {
+        spdlog::critical("cannot load machine config: {}", machineConfig.error().what());
         log::shutdown();
         return kExitFailure;
     }
