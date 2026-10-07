@@ -143,9 +143,13 @@ TEST(TrackingModule, KeepsLearnedPhasesInTheStateFile) {
         ASSERT_TRUE(module.start().has_value());
         module.stop(); // writes the state: nothing learned, so the stored phase is kept
     }
-    std::ifstream in{file};
-    const auto written = nlohmann::json::parse(in, nullptr, false);
+    nlohmann::json written;
+    {
+        std::ifstream in{file};
+        written = nlohmann::json::parse(in, nullptr, false);
+    } // close the file before removing it (Windows cannot delete open files)
     ASSERT_FALSE(written.is_discarded());
     EXPECT_EQ(written, saved);
-    std::filesystem::remove_all(dir);
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec); // cleanup must not fail the test
 }
