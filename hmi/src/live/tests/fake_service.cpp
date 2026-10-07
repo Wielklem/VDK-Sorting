@@ -7,6 +7,24 @@
 namespace vsort::hmi::test {
 namespace fb = ipc::fb;
 
+namespace {
+
+flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<fb::Cup>>>
+cupsOffset(flatbuffers::FlatBufferBuilder& fbb, const QVector<CupRowData>& cups) {
+    std::vector<flatbuffers::Offset<fb::Cup>> out;
+    for (const auto& cup : cups) {
+        std::vector<flatbuffers::Offset<fb::CupCell>> cells;
+        for (const auto& cell : cup.cells) {
+            cells.push_back(
+                fb::CreateCupCell(fbb, cell.sensorId, static_cast<fb::CellStatus>(cell.status)));
+        }
+        out.push_back(fb::CreateCup(fbb, cup.cupId, fbb.CreateVector(cells)));
+    }
+    return fbb.CreateVector(out);
+}
+
+} // namespace
+
 FakeService::FakeService(std::vector<std::uint16_t> cameraIds) {
     router_.set(zmq::sockopt::linger, 0);
     pub_.set(zmq::sockopt::linger, 0);
@@ -141,6 +159,16 @@ void FakeService::handleCommand(zmq::message_t& identity,
         ++configVersion_;
         reply = configReply(fbb, fields, module);
     }
+    if (in.payload_type() == fb::Payload::GetCupSnapshotRequest) {
+        ++cupSnapshotRequests_;
+        std::vector<flatbuffers::Offset<fb::LaneCups>> lanes;
+        for (const auto& lane : cupLanes_) {
+            const auto cups = cupsOffset(fbb, lane.cups);
+            lanes.push_back(fb::CreateLaneCups(fbb, lane.laneId, lane.seq, lane.depth, cups));
+        }
+        const auto rep = fb::CreateCupSnapshotReply(fbb, fbb.CreateVector(lanes));
+        reply = ipc::finishEnvelope(fbb, fields, fb::Payload::CupSnapshotReply, rep.Union());
+    }
     if (reply.empty()) {
         fbb.Clear();
         fields.status = 1;
@@ -212,6 +240,21 @@ void FakeService::writeFrames() {
                                                     .pixelFormat = ipc::PreviewPixelFormat::Mono8},
                               pixels);
     }
+}
+
+void FakeService::publishCupUpdate(const LaneCupsData& update) {
+    flatbuffers::FlatBufferBuilder fbb{512};
+    const auto cups = cupsOffset(fbb, update.cups);
+    const auto event = fb::CreateCupUpdateEvent(fbb, update.laneId, update.seq, cups);
+    const auto bytes = ipc::finishEnvelope(fbb,
+                                           {.type = fb::MsgType::CupUpdate,
+                                            .requestId = 0,
+                                            .timestampNs = 0,
+                                            .status = 0,
+                                            .errorText = {}},
+                                           fb::Payload::CupUpdateEvent, event.Union());
+    (void)pub_.send(zmq::buffer(ipc::kTopicCups), zmq::send_flags::sndmore);
+    (void)pub_.send(zmq::buffer(bytes), zmq::send_flags::none);
 }
 
 } // namespace vsort::hmi::test

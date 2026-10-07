@@ -12,6 +12,8 @@
 #include <vsort/ipc/envelope.hpp>
 #include <vsort/ipc/preview_ring.hpp>
 
+#include "live/cup_data.hpp"
+
 namespace vsort::hmi::test {
 
 // Minimal stand-in for the service IPC server (ROUTER + PUB + preview rings), driven by pump()
@@ -31,6 +33,14 @@ public:
     void pump();        // answer commands, publish heartbeat
     void writeFrames(); // one new frame into every ring
     void setHeartbeats(bool on) { heartbeats_ = on; }
+
+    // Product Monitor (P80.100): config modules, the cup snapshot and CupUpdate events.
+    void setConfigJson(const std::string& module, const std::string& json) {
+        configs_[module] = json;
+    }
+    void setCupSnapshot(std::vector<LaneCupsData> lanes) { cupLanes_ = std::move(lanes); }
+    void publishCupUpdate(const LaneCupsData& update);
+    [[nodiscard]] int cupSnapshotRequests() const noexcept { return cupSnapshotRequests_; }
     void publishCameraListChanged(); // like the service when a camera appears or disappears
 
     [[nodiscard]] int cameraListRequests() const noexcept { return cameraListRequests_; }
@@ -77,6 +87,8 @@ private:
     int setPreviewRequests_{0};
     std::map<std::string, std::string> configs_; // module -> JSON, like the service config store
     std::uint32_t configVersion_{1};
+    std::vector<LaneCupsData> cupLanes_;
+    int cupSnapshotRequests_{0};
 };
 
 } // namespace vsort::hmi::test

@@ -15,6 +15,7 @@
 #include <vsort/ipc/envelope.hpp>
 
 #include "live/camera_info.hpp"
+#include "live/cup_data.hpp"
 
 namespace vsort::hmi {
 
@@ -49,6 +50,8 @@ public:
     // Whole config module as JSON. setConfig() is answered with configReceived() (stored copy).
     void requestConfig(const QString& module);
     void setConfig(const QString& module, const QByteArray& json);
+    // Product Monitor (P80.100): last cups per lane; laneId 0 = all lanes.
+    void requestCupSnapshot(quint16 laneId = 0);
 
 signals:
     void connectedChanged(bool connected);
@@ -59,6 +62,8 @@ signals:
     void cameraSettingsReceived(quint16 cameraId, const vsort::hmi::CameraSettingsData& settings);
     void cameraSettingsApplied();
     void configReceived(const QString& module, const QByteArray& json, quint32 version);
+    void cupSnapshotReceived(const QVector<vsort::hmi::LaneCupsData>& lanes);
+    void cupUpdateReceived(const vsort::hmi::LaneCupsData& update);
 
 private:
     void poll();

@@ -82,12 +82,21 @@ if(VSORT_BUILD_TESTS AND NOT WIN32)
     file(WRITE ${VSORT_GUI_PAGES_DIR}/${name}.qml "${content}")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${src})
   endforeach()
+  # G140 Product monitor (P80.110)
+  foreach(name ProductMonitorView)
+    set(src ${CMAKE_CURRENT_SOURCE_DIR}/pages/product_monitor/qml/${name}.qml)
+    file(READ ${src} content)
+    string(REPLACE "import VsortHmi\n" "import VsortHmiTest\n" content "${content}")
+    file(WRITE ${VSORT_GUI_PAGES_DIR}/${name}.qml "${content}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${src})
+  endforeach()
 
   qt_add_executable(vsort_hmi_gui_tests
     tests/gui/main.cpp
     tests/gui/test_live_view_gui.cpp
     tests/gui/test_overlay_layer_gui.cpp
-    tests/gui/test_setup_gui.cpp)
+    tests/gui/test_setup_gui.cpp
+    tests/gui/test_product_monitor_gui.cpp)
   qt_add_qml_module(vsort_hmi_gui_tests
     URI VsortHmiTest
     VERSION 1.0

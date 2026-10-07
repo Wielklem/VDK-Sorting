@@ -62,6 +62,26 @@ CameraSettingsData toSettings(const fb::CameraSettings& settings) {
     return out;
 }
 
+QVector<CupRowData> toCups(const flatbuffers::Vector<flatbuffers::Offset<fb::Cup>>* cups) {
+    QVector<CupRowData> out;
+    if (cups == nullptr) {
+        return out;
+    }
+    out.reserve(static_cast<qsizetype>(cups->size()));
+    for (const auto* cup : *cups) {
+        CupRowData row;
+        row.cupId = cup->cup_id();
+        if (const auto* cells = cup->cells(); cells != nullptr) {
+            for (const auto* cell : *cells) {
+                row.cells.push_back({.sensorId = cell->sensor_id(),
+                                     .status = static_cast<CupCellStatus>(cell->status())});
+            }
+        }
+        out.push_back(std::move(row));
+    }
+    return out;
+}
+
 std::string endpoint(const QString& host, quint16 port) {
     return "tcp://" + host.toStdString() + ":" + std::to_string(port);
 }
@@ -140,6 +160,13 @@ void ServiceClient::setConfig(const QString& module, const QByteArray& json) {
     const auto body = fbb.CreateString(json.constData(), static_cast<std::size_t>(json.size()));
     const auto request = fb::CreateSetConfigRequest(fbb, name, body);
     sendRequest(fb::MsgType::SetConfig, fb::Payload::SetConfigRequest, fbb, request.Union());
+}
+
+void ServiceClient::requestCupSnapshot(quint16 laneId) {
+    flatbuffers::FlatBufferBuilder fbb{64};
+    const auto request = fb::CreateGetCupSnapshotRequest(fbb, laneId);
+    sendRequest(fb::MsgType::GetCupSnapshot, fb::Payload::GetCupSnapshotRequest, fbb,
+                request.Union());
 }
 
 void ServiceClient::sendRequest(fb::MsgType type, fb::Payload payloadType,
@@ -260,6 +287,27 @@ void ServiceClient::handleMessage(std::span<const std::uint8_t> bytes) {
     case fb::Payload::CameraListChangedEvent:
         requestCameraList(); // a camera appeared, disappeared or changed state
         break;
+    case fb::Payload::CupSnapshotReply: {
+        QVector<LaneCupsData> lanes;
+        if (const auto* list = envelope.payload_as_CupSnapshotReply()->lanes(); list != nullptr) {
+            for (const auto* lane : *list) {
+                lanes.push_back({.laneId = lane->lane_id(),
+                                 .seq = lane->seq(),
+                                 .depth = lane->depth(),
+                                 .cups = toCups(lane->cups())});
+            }
+        }
+        emit cupSnapshotReceived(lanes);
+        break;
+    }
+    case fb::Payload::CupUpdateEvent: {
+        const auto* event = envelope.payload_as_CupUpdateEvent();
+        emit cupUpdateReceived(LaneCupsData{.laneId = event->lane_id(),
+                                            .seq = event->seq(),
+                                            .depth = 0,
+                                            .cups = toCups(event->cups())});
+        break;
+    }
     default:
         break; // not needed by the live view
     }
