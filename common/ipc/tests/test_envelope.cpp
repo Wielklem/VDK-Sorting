@@ -82,3 +82,34 @@ TEST(Envelope, RejectsMisalignedBuffer) {
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, Errc::InvalidArgument);
 }
+
+TEST(Envelope, ObjectRecordRoundTrip) {
+    flatbuffers::FlatBufferBuilder fbb;
+    fb::ObjectRecordBuilder rb{fbb};
+    rb.add_lane_id(1);
+    rb.add_cup_id(-3);
+    rb.add_sensor_id(4);
+    rb.add_sensor_count(6);
+    rb.add_status(fb::PhotoStatus::Ok);
+    rb.add_camera_id(3);
+    rb.add_frame_id(1234);
+    rb.add_crop_width(640);
+    const auto record = rb.Finish();
+    const auto bytes = finishEnvelope(fbb,
+                                      {.type = fb::MsgType::ObjectRecord,
+                                       .requestId = 0,
+                                       .timestampNs = 5,
+                                       .status = 0,
+                                       .errorText = {}},
+                                      fb::Payload::ObjectRecord, record.Union());
+    const auto env = parseEnvelope(bytes);
+    ASSERT_TRUE(env.has_value()) << env.error().what();
+    EXPECT_EQ((*env)->msg_type(), 5001U);
+    const auto* r = (*env)->payload_as_ObjectRecord();
+    ASSERT_NE(r, nullptr);
+    EXPECT_EQ(r->cup_id(), -3);
+    EXPECT_EQ(r->sensor_count(), 6U);
+    EXPECT_EQ(r->status(), fb::PhotoStatus::Ok);
+    EXPECT_EQ(r->frame_id(), 1234U);
+    EXPECT_EQ(r->crop_width(), 640U);
+}

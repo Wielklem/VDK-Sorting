@@ -55,6 +55,7 @@ Topic prefix (first frame) for SUB filtering: `hb`, `cfg`, `diag`, `preview`, `c
 
 - HMI declares "service offline" after 3 missed heartbeats (3 s); reconnect is automatic (ZeroMQ), then Hello + GetCameraList + re-attach to the rings (P30.90).
 - PUB/SUB drops messages for slow subscribers by design. State is always re-fetched after reconnect, never rebuilt from missed events.
+- MSG-50-01 ObjectRecord (msg type 5001, table `ObjectRecord`) is in the schema but not published: it stays on the service's message bus until a client needs it. The HMI gets cups via MSG-50-02 (P80.100).
 
 ## 5. Preview ring buffer
 One shared memory object per camera and generation: `vdk_preview_<camera_id>_<generation>` (name rules: lowercase `[a-z0-9_]`, mapped to `/vdk_preview_x` on POSIX and `Local\vdk_preview_x` on Windows inside M15 only).
