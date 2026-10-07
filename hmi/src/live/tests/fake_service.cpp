@@ -161,6 +161,20 @@ std::vector<std::uint8_t> FakeService::configReply(flatbuffers::FlatBufferBuilde
     return ipc::finishEnvelope(fbb, fields, fb::Payload::ConfigReply, reply.Union());
 }
 
+void FakeService::publishCameraListChanged() {
+    flatbuffers::FlatBufferBuilder fbb{64};
+    const auto event = fb::CreateCameraListChangedEvent(fbb);
+    const auto bytes = ipc::finishEnvelope(fbb,
+                                           {.type = fb::MsgType::CameraListChanged,
+                                            .requestId = 0,
+                                            .timestampNs = 0,
+                                            .status = 0,
+                                            .errorText = {}},
+                                           fb::Payload::CameraListChangedEvent, event.Union());
+    (void)pub_.send(zmq::buffer(ipc::kTopicCamera), zmq::send_flags::sndmore);
+    (void)pub_.send(zmq::buffer(bytes), zmq::send_flags::none);
+}
+
 void FakeService::publishHeartbeat() {
     flatbuffers::FlatBufferBuilder fbb{128};
     const auto event =

@@ -44,13 +44,14 @@ Envelope (every command and event):
 - Commands are idempotent where possible.
 
 ## 4. Events (PUB/SUB)
-Topic prefix (first frame) for SUB filtering: `hb`, `cfg`, `diag`, `preview`.
+Topic prefix (first frame) for SUB filtering: `hb`, `cfg`, `diag`, `preview`, `cam`.
 | Event | Message | Rate |
 |---|---|---|
 | Heartbeat | MSG-10-01 (service state, uptime, seq) | 1 Hz |
 | ConfigChanged | MSG-20-01 (config id, new ConfigVersion) | on change |
 | DiagEvent | MSG-90-01 | on change, ≤ 10 Hz aggregated |
 | PreviewStreamChanged | camera_id, shm name, generation | on (re)create |
+| CameraListChanged | MSG-30-02, no payload: a camera appeared, disappeared or changed state; the HMI sends GetCameraList again | on change |
 
 - HMI declares "service offline" after 3 missed heartbeats (3 s); reconnect is automatic (ZeroMQ), then Hello + GetCameraList + re-attach to the rings (P30.90).
 - PUB/SUB drops messages for slow subscribers by design. State is always re-fetched after reconnect, never rebuilt from missed events.

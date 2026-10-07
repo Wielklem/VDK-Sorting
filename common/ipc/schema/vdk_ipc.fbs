@@ -12,6 +12,7 @@ enum MsgType : uint16 {
   Heartbeat = 1001,            // MSG-10-01
   ConfigChanged = 2001,        // MSG-20-01
   PreviewStreamChanged = 3001, // MSG-30-01
+  CameraListChanged = 3002,    // MSG-30-02
   Hello = 3010,
   GetCameraList = 3011,
   SetPreview = 3012,
@@ -80,14 +81,19 @@ table PreviewStreamChangedEvent {
   pixel_format: PixelFormat = Mono8;
 }
 
+// The camera list or a camera state changed: ask GetCameraList again.
+table CameraListChangedEvent {}
+
 union Payload {
+
   HelloRequest, HelloReply,
   GetCameraListRequest, CameraListReply,
   SetPreviewRequest, SetPreviewReply,
   GetCameraSettingsRequest, CameraSettingsReply,
   SetCameraSettingsRequest,
   GetConfigRequest, ConfigReply, SetConfigRequest,
-  HeartbeatEvent, ConfigChangedEvent, PreviewStreamChangedEvent
+  HeartbeatEvent, ConfigChangedEvent, PreviewStreamChangedEvent, CameraListChangedEvent
+
 }
 
 table Envelope {

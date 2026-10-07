@@ -48,6 +48,9 @@ public:
     // Camera modules hand their frames to preview().submit().
     [[nodiscard]] PreviewHub& preview() noexcept { return hub_; }
 
+    // Publishes CameraListChanged. Thread-safe; may be called before start().
+    void notifyCamerasChanged();
+
 private:
     void run(const std::stop_token& stop);
     void serviceCommands();

@@ -10,6 +10,8 @@
 #include <sqlite3.h>
 #include <zmq.hpp>
 
+#include <vsort/camera/camera_map.hpp>
+#include <vsort/camera/camera_settings_config.hpp>
 #include <vsort/common/config_store.hpp>
 #include <vsort/common/logging.hpp>
 #include <vsort/common/message_bus.hpp>
@@ -18,7 +20,13 @@
 #include <vsort/common/version.hpp>
 #include <vsort/platform/paths.hpp>
 
+#include "camera/camera_manager.hpp"
+#include "camera/camera_module.hpp"
+#include "camera/replay_backend.hpp"
 #include "ipc/ipc_server.hpp"
+#ifdef VSORT_WITH_GALAXY
+#include "camera/daheng_backend.hpp"
+#endif
 
 namespace vsort::service {
 namespace {
@@ -31,7 +39,49 @@ int fail(std::string_view what, const Error& error) {
     return kExitFailure;
 }
 
+// nullptr = no cameras (--camera-source none, or no Daheng support in this build).
+Result<std::unique_ptr<ICameraBackend>> makeBackend(const Options& options) {
+    CameraSource source = options.cameraSource;
+    if (source == CameraSource::Auto) {
+#ifdef VSORT_WITH_GALAXY
+        source = CameraSource::Daheng;
+#else
+        source = CameraSource::None;
+#endif
+    }
+    switch (source) {
+    case CameraSource::Replay: {
+        auto backend = ReplayBackend::create({.sessionDir = options.replayDir,
+                                              .speed = options.replaySpeed,
+                                              .loop = options.replayLoop});
+        if (!backend) {
+            return std::unexpected{backend.error()};
+        }
+        return std::unique_ptr<ICameraBackend>{std::move(*backend)};
+    }
+    case CameraSource::Daheng:
+#ifdef VSORT_WITH_GALAXY
+        return std::unique_ptr<ICameraBackend>{std::make_unique<DahengBackend>()};
+#else
+        return makeError(Errc::NotSupported,
+                         "this build has no Daheng support (configure with VSORT_WITH_GALAXY)");
+#endif
+    case CameraSource::Auto:
+    case CameraSource::None:
+        break;
+    }
+    return std::unique_ptr<ICameraBackend>{};
+}
+
+Result<> registerCameraConfig(IConfigStore& store) {
+    if (auto registered = camera::registerCameraMap(store); !registered) {
+        return registered;
+    }
+    return camera::registerCameraSettings(store);
+}
+
 // Polls module health. A Failed module means the service cannot do its job: stop.
+
 bool anyModuleFailed(const ModuleRegistry& registry) {
     bool failed = false;
     for (const auto& entry : registry.status()) {
@@ -87,13 +137,46 @@ int runService(const Options& options, platform::IServiceHost& host) {
     }
     ModuleRegistry registry; // declared after bus and configStore: destroyed before them
     // Modules are added here as they are implemented: registry.add(std::make_unique<...>());
-    // The camera module will call IpcServer::preview().submit() and replace NullCameraAccess.
-    if (const auto added = registry.add(std::make_unique<IpcServer>(
-            IpcConfig{}, std::make_unique<NullCameraAccess>(), &configStore));
+    // Cameras (P30.85): the manager is shared by the IPC server (as ICameraAccess) and the
+    // camera module. Declared after the registry's dependencies, destroyed before the registry.
+    std::shared_ptr<CameraManager> cameras;
+    std::unique_ptr<ICameraAccess> cameraAccess = std::make_unique<NullCameraAccess>();
+    auto backend = makeBackend(options);
+    if (!backend) {
+        spdlog::critical("cannot set up cameras: {}", backend.error().what());
+        log::shutdown();
+        return kExitFailure;
+    }
+    if (*backend) {
+        if (const auto cameraConfig = registerCameraConfig(configStore); !cameraConfig) {
+            spdlog::critical("cannot register camera config: {}", cameraConfig.error().what());
+            log::shutdown();
+            return kExitFailure;
+        }
+        cameras =
+            std::make_shared<CameraManager>(std::move(*backend), &configStore,
+                                            CameraManagerOptions{.forceFreeRun = options.freeRun});
+        cameraAccess = std::make_unique<ManagerCameraAccess>(cameras);
+    } else {
+        spdlog::info("cameras: no camera source (use --camera-source or --replay)");
+    }
+
+    if (const auto added = registry.add(
+            std::make_unique<IpcServer>(IpcConfig{}, std::move(cameraAccess), &configStore));
         !added) {
         spdlog::critical("cannot add ipc module: {}", added.error().what());
         log::shutdown();
         return kExitFailure;
+    }
+    if (cameras) {
+        auto* ipc = static_cast<IpcServer*>(registry.find("ipc"));
+        cameras->addFrameSink([ipc](const camera::Frame& frame) { ipc->preview().submit(frame); });
+        cameras->setOnListChanged([ipc] { ipc->notifyCamerasChanged(); });
+        if (const auto added = registry.add(std::make_unique<CameraModule>(cameras)); !added) {
+            spdlog::critical("cannot add camera module: {}", added.error().what());
+            log::shutdown();
+            return kExitFailure;
+        }
     }
     if (const auto started = registry.startAll(context); !started) {
         spdlog::critical("module start failed: {}", started.error().what());

@@ -1,7 +1,10 @@
 # Interfaces plus the resilient wrapper (P20.50). The Daheng adapter (P20.30) is opt-in;
 # the recorder (P20.60) and the replay camera (P20.70) are always built.
 find_package(Threads REQUIRED)
-add_library(vsort_camera STATIC src/camera_map.cpp src/resilient_camera.cpp)
+add_library(vsort_camera STATIC
+  src/camera_map.cpp
+  src/camera_settings_config.cpp
+  src/resilient_camera.cpp)
 add_library(vsort::camera ALIAS vsort_camera)
 target_include_directories(vsort_camera PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(vsort_camera PUBLIC vsort::common PRIVATE Threads::Threads)

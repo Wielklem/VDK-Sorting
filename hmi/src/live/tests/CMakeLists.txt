@@ -11,6 +11,7 @@ vsort_set_warnings(vsort_hmi_test_support)
 add_executable(vsort_hmi_live_tests
   main.cpp
   test_live_view_model.cpp
+  test_service_events.cpp
   test_setup_models.cpp)
 target_link_libraries(vsort_hmi_live_tests PRIVATE vsort_hmi_test_support GTest::gtest)
 vsort_set_warnings(vsort_hmi_live_tests)

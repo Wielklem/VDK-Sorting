@@ -6,18 +6,26 @@ find_package(unofficial-sqlite3 CONFIG REQUIRED)
 add_library(vsort_service_core STATIC
   src/cli.cpp
   src/service_app.cpp
+  src/camera/camera_manager.cpp
+  src/camera/replay_backend.cpp
   src/ipc/command_handler.cpp
   src/ipc/downscale.cpp
   src/ipc/ipc_server.cpp
   src/ipc/preview_hub.cpp)
 target_include_directories(vsort_service_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(vsort_service_core
-  PUBLIC vsort::common vsort::platform vsort::ipc vsort::camera
+  PUBLIC vsort::common vsort::platform vsort::ipc vsort::camera vsort::replay
   PRIVATE opencv_core opencv_imgproc unofficial::sqlite3::sqlite3)
 if(TARGET cppzmq-static)
   target_link_libraries(vsort_service_core PRIVATE cppzmq-static)
 else()
   target_link_libraries(vsort_service_core PRIVATE cppzmq)
+endif()
+# Real cameras need the proprietary Galaxy SDK (opt-in, see camera/CMakeLists.txt).
+if(VSORT_WITH_GALAXY)
+  target_sources(vsort_service_core PRIVATE src/camera/daheng_backend.cpp)
+  target_link_libraries(vsort_service_core PUBLIC vsort::camera_daheng)
+  target_compile_definitions(vsort_service_core PUBLIC VSORT_WITH_GALAXY)
 endif()
 vsort_set_warnings(vsort_service_core)
 

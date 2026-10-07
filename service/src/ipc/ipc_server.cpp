@@ -201,7 +201,21 @@ void IpcServer::enqueue(std::string topic, std::vector<std::uint8_t> message) {
     outbox_.emplace_back(std::move(topic), std::move(message));
 }
 
+void IpcServer::notifyCamerasChanged() {
+    flatbuffers::FlatBufferBuilder fbb{64};
+    const auto event = fb::CreateCameraListChangedEvent(fbb);
+    enqueue(std::string{ipc::kTopicCamera},
+            ipc::finishEnvelope(fbb,
+                                {.type = fb::MsgType::CameraListChanged,
+                                 .requestId = 0,
+                                 .timestampNs = static_cast<std::uint64_t>(Timestamp::now().ns()),
+                                 .status = 0,
+                                 .errorText = {}},
+                                fb::Payload::CameraListChangedEvent, event.Union()));
+}
+
 // Runs on the preview hub's worker thread: hand over to the I/O thread (sockets are not
+
 // thread-safe).
 void IpcServer::onStreamChanged(const PreviewStream& stream) {
     flatbuffers::FlatBufferBuilder fbb{256};

@@ -31,6 +31,7 @@ public:
     void pump();        // answer commands, publish heartbeat
     void writeFrames(); // one new frame into every ring
     void setHeartbeats(bool on) { heartbeats_ = on; }
+    void publishCameraListChanged(); // like the service when a camera appears or disappears
 
     [[nodiscard]] int cameraListRequests() const noexcept { return cameraListRequests_; }
     [[nodiscard]] int setPreviewRequests() const noexcept { return setPreviewRequests_; }
