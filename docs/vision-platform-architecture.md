@@ -165,7 +165,7 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | MSG-30-01 | Frame (ID, camera, timestamp, buffer ref) | [V1] |
 | MSG-30-02 | CameraListChanged (event, no payload) | [V1] |
 | MSG-50-01 | ObjectRecord (V1: lane, cup ID, sensor, photo or NO_DATA; one record per sensor and cup) | [V1][REDO] becomes one record per object with all photos and the encoder position |
-| MSG-50-02 | CupCreated / CupMeasurement (lane, cup ID, sensor, key, value or NO_DATA) + snapshot of last 50 cups per lane | [V1] |
+| MSG-50-02 | CupUpdate: the changed cups of one lane (cup ID, per sensor Pending/Ok/NoData + measurements) with seq; GetCupSnapshot gives the last 50 cups per lane (section 40.50) | [V1] |
 | MSG-60-01 | Measurement | [V1] |
 | MSG-70-01 | Decision | [V1] |
 | MSG-75-01 | EjectCommand | [LATER] |
@@ -275,6 +275,27 @@ V1 shortcuts (compared to the final implementation):
 - **Latency.** USB/GigE latency is part of the learned phase; it drifts with speed and is followed only at steady speed.
 - **Single-sensor lanes** get timing-based detection only.
 - **P40.70 (replay test with dropped frames)** stays open until a 4-camera recording with a start and a stop exists; synthetic tests cover the logic.
+
+### 40.50 Product Monitor data (M80, P80.100)
+
+```
+tracking → ObjectRecord (bus) → module "cups": CupTable, ≤ 10 Hz → CupUpdate (bus) → IpcServer → topic "cups"
+HMI connects → GetCupSnapshot → CupMonitor::snapshot()
+```
+
+- **Rows.** Per lane the last 50 cups by lane cup ID, continuous: missing IDs are created as rows. Records older than the window are ignored.
+- **Cells.** One per sensor of the lane, upstream first: Pending (not reached yet), Ok, NoData. A later record for the same lane, cup and sensor replaces the earlier one (P40.40 corrections).
+- **Passed without photo.** Cup c is due at sensor s when the newest cup ID passes c + (offset_s − smallest offset); still Pending 3 cups after that → NoData. Covers a silent camera and lost records. Nothing changes while the machine stands still.
+- **Updates.** At most 10 per second per lane; only changed cups, full state per cup, newest first; seq + 1 per update.
+- **Snapshot.** `GetCupSnapshot(lane_id; 0 = all)` returns per lane the cups (newest first), the depth and the seq they include. The HMI subscribes first, asks the snapshot, and ignores updates with seq ≤ that seq. Updates carry full state, so a duplicate is harmless.
+- **Columns.** The service sends every sensor; the HMI picks the columns (show_in_monitor, measurement catalog) from the `machine` config via GetConfig.
+- **Always on.** Module "cups" also runs without cameras (empty table); Hello lists the capability `cups`. The log shows a summary per lane every 10 s when it changed.
+
+V1 shortcuts (compared to the final implementation):
+- **In memory only.** The table is empty after a service restart; history comes with the results database (P80.10).
+- **Measurements** are in the message (`measurements: [key, value]`) but stay empty until P60.
+- **Read once.** The machine config is read at start; restart after editing it.
+- **Code defaults.** The pass margin (3 cups), depth (50) and update interval (100 ms) are not configurable yet.
 ---
 
 ## 50. Controller (own PLC/PCB): final version only
@@ -484,7 +505,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P80.70** Build the G80.30 image browser: filter by batch, grade or lane, with measurements.
 - **P80.80** Add CSV export. [PARTIAL]
 - **P80.90** Add a disk-space guard and basic cleanup. [PARTIAL]
-- **P80.100** Service: per-lane cup ring buffer (last 50), lane cup ID = sensor count − sensor offset, publish MSG-50-02, snapshot on HMI connect.
+- **P80.100 [PARTIALLY_DONE]** Service: per-lane cup buffer (last 50), lane cup ID = sensor count − sensor offset, publish MSG-50-02 on topic `cups`, GetCupSnapshot for the HMI (section 40.50).
 - **P80.110** Build G140.10 Product monitor: dynamic columns from Sensor config, red "no data" cells, freeze / back-to-live button.
 - **P80.120** Build G140.20 offset calibration (move one cup through an empty machine, set offsets).
 
@@ -624,6 +645,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 | ObjectRecord per sensor (P40.10) | One record per sensor and cup, no pixels | One record per object with all photos and the encoder position (P130); pixel access decided in P60.10 |
 | Miss detection (P40.40) | Timing plus cross-sensor vote; two sensors failing at the same moment cannot be resolved; repairs mark up to 50 cups NoData | Trigger log + encoder give exact cup positions (P130) |
 | Cup numbering (P40.40) | Learned phase per sensor (fraction of a cup) in `tracking_state.json` | Encoder counts per sensor (P130.35) |
+| Cup table (P80.100) | Last 50 cups per lane, in memory only; measurements empty; margin, depth and interval in code | Results DB keeps history (P80.10); measurements from P60 |
 
 Everything else is built once and only extended.
 

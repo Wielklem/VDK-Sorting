@@ -24,6 +24,7 @@
 #include "camera/camera_manager.hpp"
 #include "camera/camera_module.hpp"
 #include "camera/replay_backend.hpp"
+#include "cups/cup_monitor.hpp"
 #include "ipc/ipc_server.hpp"
 #include "tracking/tracking_config.hpp"
 #include "tracking/tracking_module.hpp"
@@ -203,6 +204,14 @@ int runService(const Options& options, platform::IServiceHost& host) {
             std::make_unique<IpcServer>(IpcConfig{}, std::move(cameraAccess), &configStore));
         !added) {
         spdlog::critical("cannot add ipc module: {}", added.error().what());
+        log::shutdown();
+        return kExitFailure;
+    }
+    // Product Monitor data (P80.100): last cups per lane, also without cameras (empty table).
+    auto cupMonitor = std::make_unique<CupMonitor>(&configStore);
+    static_cast<IpcServer*>(registry.find("ipc"))->setCupSource(cupMonitor.get());
+    if (const auto added = registry.add(std::move(cupMonitor)); !added) {
+        spdlog::critical("cannot add cups module: {}", added.error().what());
         log::shutdown();
         return kExitFailure;
     }

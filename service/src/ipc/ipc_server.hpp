@@ -17,6 +17,7 @@
 #include <vsort/common/module.hpp>
 #include <vsort/ipc/envelope.hpp>
 
+#include "cups/cup_types.hpp"
 #include "ipc/camera_access.hpp"
 #include "ipc/command_handler.hpp"
 #include "ipc/preview_hub.hpp"
@@ -51,6 +52,9 @@ public:
     // Publishes CameraListChanged. Thread-safe; may be called before start().
     void notifyCamerasChanged();
 
+    // Product Monitor (P80.100): snapshot requests go to `source`. Call before start().
+    void setCupSource(const ICupSource* source) noexcept { handler_.setCupSource(source); }
+
 private:
     void run(const std::stop_token& stop);
     void serviceCommands();
@@ -66,6 +70,7 @@ private:
     CommandHandler handler_;
 
     std::shared_ptr<Subscription<ConfigChanged>> configSub_;
+    std::shared_ptr<Subscription<CupUpdate>> cupSub_;
 
     zmq::context_t context_{1};
     zmq::socket_t router_;

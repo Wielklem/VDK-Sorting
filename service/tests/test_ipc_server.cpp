@@ -220,3 +220,16 @@ TEST(IpcServer, StartFailsWhenPortIsTaken) {
     first.stop();
     first.stop(); // idempotent
 }
+
+TEST_F(IpcServerTest, CupUpdatesGoOutOnTheCupsTopic) {
+    bus.publish(CupUpdate{
+        .laneId = 1,
+        .seq = 4,
+        .cups = {CupState{.cupId = 12, .cells = {{.sensorId = 1, .status = CellStatus::Ok}}}}});
+    const auto e = waitTopic(sub, ipc::kTopicCups, 3s);
+    ASSERT_TRUE(e.has_value());
+    const auto* event = e->env->payload_as_CupUpdateEvent();
+    ASSERT_NE(event, nullptr);
+    EXPECT_EQ(event->seq(), 4U);
+    EXPECT_EQ(event->cups()->Get(0)->cup_id(), 12);
+}

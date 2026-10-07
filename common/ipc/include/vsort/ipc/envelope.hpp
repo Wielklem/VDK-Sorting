@@ -24,6 +24,7 @@ inline constexpr std::string_view kTopicHeartbeat = "hb";
 inline constexpr std::string_view kTopicConfig = "cfg";
 inline constexpr std::string_view kTopicPreview = "preview";
 inline constexpr std::string_view kTopicCamera = "cam";
+inline constexpr std::string_view kTopicCups = "cups"; // MSG-50-02 (P80.100)
 
 struct EnvelopeFields {
     fb::MsgType type{fb::MsgType::Hello};

@@ -20,7 +20,9 @@ enum MsgType : uint16 {
   SetCameraSettings = 3014,
   GetConfig = 3015,
   SetConfig = 3016,
-  ObjectRecord = 5001          // MSG-50-01 (not published yet)
+  ObjectRecord = 5001,         // MSG-50-01 (not published yet)
+  CupUpdate = 5002,            // MSG-50-02, topic "cups"
+  GetCupSnapshot = 5010
 }
 
 table CameraSettings {
@@ -106,6 +108,43 @@ table ObjectRecord {
   crop_height: uint32;
 }
 
+// ---- Product Monitor (P80.100) ----
+enum CellStatus : uint8 { Pending = 0, Ok = 1, NoData = 2 }
+
+table MeasurementValue {
+  key: string;
+  value: double;
+}
+
+table CupCell {
+  sensor_id: uint16;
+  status: CellStatus = Pending;
+  measurements: [MeasurementValue]; // empty until the analysis stages (P60)
+}
+
+table Cup {
+  cup_id: int64;
+  cells: [CupCell]; // every sensor of the lane, upstream first
+}
+
+// MSG-50-02: the cups of one lane that changed since the previous update (full state per cup,
+// newest first). seq + 1 per update of that lane.
+table CupUpdateEvent {
+  lane_id: uint16;
+  seq: uint64;
+  cups: [Cup];
+}
+
+table GetCupSnapshotRequest { lane_id: uint16; } // 0 = all lanes
+
+table LaneCups {
+  lane_id: uint16;
+  seq: uint64;    // events with seq <= this are already included
+  depth: uint16;  // cups kept per lane
+  cups: [Cup];    // newest first
+}
+table CupSnapshotReply { lanes: [LaneCups]; }
+
 union Payload {
 
   HelloRequest, HelloReply,
@@ -115,7 +154,8 @@ union Payload {
   SetCameraSettingsRequest,
   GetConfigRequest, ConfigReply, SetConfigRequest,
   HeartbeatEvent, ConfigChangedEvent, PreviewStreamChangedEvent, CameraListChangedEvent,
-  ObjectRecord
+  ObjectRecord,
+  CupUpdateEvent, GetCupSnapshotRequest, CupSnapshotReply
 
 }
 
