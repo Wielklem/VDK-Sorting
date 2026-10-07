@@ -6,6 +6,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "ipc/cup_messages.hpp"
+
 namespace vsort::service {
 namespace {
 
@@ -145,14 +147,19 @@ Result<CommandHandler::Reply> CommandHandler::dispatch(Fbb& fbb,
         return onGetConfig(fbb, *request.payload_as_GetConfigRequest());
     case fb::Payload::SetConfigRequest:
         return onSetConfig(fbb, *request.payload_as_SetConfigRequest());
+    case fb::Payload::GetCupSnapshotRequest:
+        return onGetCupSnapshot(fbb, *request.payload_as_GetCupSnapshotRequest());
     default:
         return makeError(Errc::NotSupported, "unknown or unsupported command");
     }
 }
 
 Result<CommandHandler::Reply> CommandHandler::onHello(Fbb& fbb) const {
-    const std::vector<flatbuffers::Offset<flatbuffers::String>> caps{
+    std::vector<flatbuffers::Offset<flatbuffers::String>> caps{
         str(fbb, "preview"), str(fbb, "camera_settings"), str(fbb, "config")};
+    if (cups_ != nullptr) {
+        caps.push_back(str(fbb, "cups"));
+    }
     const auto reply =
         fb::CreateHelloReply(fbb, str(fbb, serviceVersion_), fb::ServiceState::Running, uptimeMs(),
                              fbb.CreateVector(caps));
@@ -256,6 +263,16 @@ Result<CommandHandler::Reply> CommandHandler::onSetConfig(Fbb& fbb,
     const auto reply =
         fb::CreateConfigReply(fbb, str(fbb, module), str(fbb, stored->dump()), version->number);
     return Reply{fb::Payload::ConfigReply, reply.Union()};
+}
+
+Result<CommandHandler::Reply>
+CommandHandler::onGetCupSnapshot(Fbb& fbb, const fb::GetCupSnapshotRequest& req) const {
+    if (cups_ == nullptr) {
+        return makeError(Errc::NotSupported, "no product monitor data");
+    }
+    const auto laneId = req.lane_id() == 0 ? std::nullopt : std::optional{req.lane_id()};
+    const auto reply = makeCupSnapshot(fbb, cups_->snapshot(laneId));
+    return Reply{fb::Payload::CupSnapshotReply, reply.Union()};
 }
 
 } // namespace vsort::service

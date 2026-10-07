@@ -9,6 +9,7 @@
 #include <vsort/common/timestamp.hpp>
 #include <vsort/ipc/envelope.hpp>
 
+#include "cups/cup_types.hpp"
 #include "ipc/camera_access.hpp"
 #include "ipc/preview_hub.hpp"
 
@@ -27,6 +28,10 @@ public:
     [[nodiscard]] std::vector<std::uint8_t> handle(std::span<const std::uint8_t> request) const;
 
     [[nodiscard]] std::uint64_t uptimeMs() const noexcept;
+
+    // Product Monitor data (P80.100). Null: GetCupSnapshot answers NotSupported.
+    // Set before the IPC thread starts; `source` must outlive the handler.
+    void setCupSource(const ICupSource* source) noexcept { cups_ = source; }
 
 private:
     struct Reply {
@@ -49,12 +54,15 @@ private:
                                             const ipc::fb::GetConfigRequest& req) const;
     [[nodiscard]] Result<Reply> onSetConfig(flatbuffers::FlatBufferBuilder& fbb,
                                             const ipc::fb::SetConfigRequest& req) const;
+    [[nodiscard]] Result<Reply> onGetCupSnapshot(flatbuffers::FlatBufferBuilder& fbb,
+                                                 const ipc::fb::GetCupSnapshotRequest& req) const;
 
     PreviewHub& hub_;
     ICameraAccess& cameras_;
     IConfigStore* config_;
     std::string serviceVersion_;
     Timestamp started_;
+    const ICupSource* cups_{nullptr};
 };
 
 } // namespace vsort::service

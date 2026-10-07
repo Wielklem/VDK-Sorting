@@ -17,7 +17,10 @@ add_library(vsort_service_core STATIC
   src/tracking/lane_consistency.cpp
   src/tracking/lane_crop.cpp
   src/tracking/tracking_config.cpp
-  src/tracking/tracking_module.cpp)
+  src/tracking/tracking_module.cpp
+  src/cups/cup_monitor.cpp
+  src/cups/cup_table.cpp
+  src/ipc/cup_messages.cpp)
 target_include_directories(vsort_service_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(vsort_service_core
   PUBLIC vsort::common vsort::platform vsort::ipc vsort::camera vsort::replay

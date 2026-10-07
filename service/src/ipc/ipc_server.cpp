@@ -7,6 +7,8 @@
 
 #include <vsort/common/version.hpp>
 
+#include "ipc/cup_messages.hpp"
+
 namespace vsort::service {
 namespace {
 
@@ -35,6 +37,7 @@ IpcServer::~IpcServer() {
 
 Result<> IpcServer::init(ModuleContext& context) {
     configSub_ = context.bus.subscribe<ConfigChanged>(64);
+    cupSub_ = context.bus.subscribe<CupUpdate>(256);
     return {};
 }
 
@@ -161,6 +164,11 @@ void IpcServer::serviceCommands() {
 }
 
 void IpcServer::drainBus() {
+    if (cupSub_) {
+        cupSub_->drain([this](const CupUpdate& update) {
+            publish(ipc::kTopicCups, makeCupUpdateEnvelope(update));
+        });
+    }
     if (!configSub_) {
         return;
     }
