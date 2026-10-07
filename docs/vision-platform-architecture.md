@@ -128,6 +128,7 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | M30.20 | Replay camera | Plays recorded sets as live | `ICamera` | [V1] |
 | M30.30 | Recorder | Raw frames + metadata to disk | — | [V1] |
 | M30.40 | Trigger source config | V1: external trigger only. Later: trigger plan from own controller | — | [PARTIAL] |
+| M30.50 | Camera manager | Connects the camera adapters to the service: discovery loop, camera map (serial → ID), saved settings, reconnect, frame fan-out | `ICameraBackend`, `ICameraAccess` | [V1] |
 | M40 | Controller abstraction | Encoder, triggers, lights, ejects, IO, capability flags | `IController` | [V1] interface |
 | M40.10 | Null controller | No capabilities (shadow mode) | `IController` | [V1] |
 | M40.20 | Simulated controller | Fake encoder, trigger log, events, eject acks | `IController` | [PARTIAL] |
@@ -162,6 +163,7 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | MSG-10-01 | Heartbeat | [V1] |
 | MSG-20-01 | ConfigChanged | [V1] |
 | MSG-30-01 | Frame (ID, camera, timestamp, buffer ref) | [V1] |
+| MSG-30-02 | CameraListChanged (event, no payload) | [V1] |
 | MSG-50-01 | ObjectRecord (cup ID per lane, lane, photos) | [V1][REDO] gains encoder position |
 | MSG-50-02 | CupCreated / CupMeasurement (lane, cup ID, sensor, key, value or NO_DATA) + snapshot of last 50 cups per lane | [V1] |
 | MSG-60-01 | Measurement | [V1] |
@@ -169,6 +171,34 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | MSG-75-01 | EjectCommand | [LATER] |
 | MSG-90-01 | DiagEvent | [V1] |
 | MSG-90-02 | ControllerEvent | [LATER] |
+
+
+### 40.20 Camera wiring (M30.50, P30.85)
+
+The camera module connects the camera adapters (M30.10, M30.20) to the rest of the service. It lives in `service/src/camera/`.
+
+| Part | Responsibility |
+|---|---|
+| `ICameraBackend` | Discovery plus a factory for closed cameras. `DahengBackend` (only built with `VSORT_WITH_GALAXY`) and `ReplayBackend` (plays a recorded session). |
+| `CameraManager` | One slot per logical camera ID: camera map, saved settings, connect and reconnect, frame fan-out. Thread-safe. |
+| Supervisor thread | Every 2 s: discovers cameras, then opens, configures and starts every mapped camera that is not connected. A missing camera is never fatal. Discovery only runs while something is missing. |
+| `ManagerCameraAccess` | `ICameraAccess` adapter (list, settings, apply) handed to the IPC server. |
+| `CameraModule` | `IModule` "camera", depends on "ipc". Starts and stops the manager. Health is Degraded while a mapped camera is not streaming. |
+
+```
+grab thread → frame callback (sets meta.cameraIndex = logical ID) → frame sinks → PreviewHub::submit()
+HMI → IPC server → ManagerCameraAccess → CameraManager → ResilientCamera → adapter
+```
+
+Rules:
+
+- **Frame sinks.** More consumers (tracking, recorder) are added as sinks in the same way. This is a direct callback and deviates from principle 5 (see section 110).
+- **Camera map** (`camera_map`). If it is empty, the cameras found are numbered 0..n-1 by serial number and saved. If it has entries, only mapped cameras are used. Others are logged once and ignored. Configured cameras that are not found are listed as Closed.
+- **Saved settings** (`camera_settings`, per logical ID, not per serial, because they belong to the lane position). They are applied on every (re)open and saved after the camera accepted an apply. The default trigger is hardware (V1: external PLC).
+- **Bench option `--free-run`.** It forces free-run at open and is never saved.
+- **Replay** (`--replay <session>`). It uses a fixed map from the recorded indices and neither reads nor writes `camera_map` or `camera_settings`.
+- **Change events.** Changes of the camera list or of a camera state are announced with the event `CameraListChanged` (MSG-30-02). The HMI then fetches the list again.
+- **Open limits.** The camera map is read once at start (editing it at runtime comes with G20.20). The HMI settings page does not edit trigger mode yet.
 
 ---
 
@@ -293,29 +323,30 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 **Done when:** the service starts and stops cleanly, loads and validates config, and CI is green.
 
 #### P20 Acquisition (M30)
-- **P20.10 [BUSY]** Define the `ICamera` interface: open/close, settings (exposure, gain, ROI, trigger mode), start/stop, frame callback, frame metadata.
-- **P20.20 [BUSY]** Build a frame buffer pool: preallocated and ref-counted, so frames can later go to shared memory without copying.
-- **P20.30 [BUSY]** Build the Daheng adapter (M30.10): discovery (USB3 and GigE), open by serial number, hardware trigger on Line0, frame ID and timestamp from the SDK.
-- **P20.35 [BUSY]** Build "Detect cameras" and GigE IP setup in the app (replaces AutoIPConfigTool): list cameras, flag those outside the NIC subnet, set the IP by MAC address.
-- **P20.35 [BUSY]** "Detect cameras" in the app, plus setting the GigE IP from the app. This replaces AutoIPConfigTool by calling the same SDK function, so no external tool is needed.
-- **P20.40 [BUSY]** Tune GigE: jumbo frames, packet delay, NIC receive buffers. Write the Ubuntu PC setup checklist.
-- **P20.50 [BUSY]** Add camera health handling: auto-reconnect, error counters, frame-ID gap detection.
-- **P20.60 [BUSY]** Build the recorder (M30.30): raw frames plus metadata, one folder per session.
-- **P20.70 [BUSY]** Build the replay camera (M30.20): plays recordings through `ICamera` at original or adjustable rate, with loop support.
-- **P20.80 [BUSY]** Add camera mapping in config: serial number → logical camera ID.
-- **P20.90 [BUSY]** Build a CLI record tool and record initial datasets on the existing machine.
+- **P20.10 [DONE]** Define the `ICamera` interface: open/close, settings (exposure, gain, ROI, trigger mode), start/stop, frame callback, frame metadata.
+- **P20.20 [DONE]** Build a frame buffer pool: preallocated and ref-counted, so frames can later go to shared memory without copying.
+- **P20.30 [DONE]** Build the Daheng adapter (M30.10): discovery (USB3 and GigE), open by serial number, hardware trigger on Line0, frame ID and timestamp from the SDK.
+- **P20.35 [DONE]** Build "Detect cameras" and GigE IP setup in the app (replaces AutoIPConfigTool): list cameras, flag those outside the NIC subnet, set the IP by MAC address.
+- **P20.36 ** "Detect cameras" in the app, plus setting the GigE IP from the app. This replaces AutoIPConfigTool by calling the same SDK function, so no external tool is needed.
+- **P20.40 [DONE]** Tune GigE: jumbo frames, packet delay, NIC receive buffers. Write the Ubuntu PC setup checklist.
+- **P20.50 [DONE]** Add camera health handling: auto-reconnect, error counters, frame-ID gap detection.
+- **P20.60 [DONE]** Build the recorder (M30.30): raw frames plus metadata, one folder per session.
+- **P20.70 [DONE]** Build the replay camera (M30.20): plays recordings through `ICamera` at original or adjustable rate, with loop support.
+- **P20.80 [DONE]** Add camera mapping in config: serial number → logical camera ID.
+- **P20.90 [DONE]** Build a CLI record tool and record initial datasets on the existing machine.
 
 **Done when:** all cameras grab on the external trigger without drops at target rate, and datasets are recorded.
 
 #### P30 HMI shell + live view (M100, G30)
-- **P30.10 [BUSY]** Design the IPC: a shared-memory ring buffer per camera for preview frames (via `ISharedMemory`, M15), ZeroMQ for commands and events, and a serialization format (FlatBuffers or Protobuf).
-- **P30.20 [BUSY]** Build the service-side IPC server: preview downscaler (configurable fps and resolution) and command handler.
-- **P30.30 [BUSY]** Build the HMI skeleton: Qt Quick app, navigation bar, `IPage` plugin loader.
-- **P30.40 [BUSY]** Build the design system: colours, typography, standard QML components (buttons, numeric inputs, tables, dialogs).
-- **P30.50 [BUSY]** Build the video item: a custom `QQuickItem` that renders frames as GPU textures.
-- **P30.60 [BUSY]** Build G30.10 Live view: grid of all cameras, single-camera fullscreen, freeze/unfreeze per camera and for all cameras.
-- **P30.70 [BUSY]** Build the overlay layer: ROIs, lane lines and detections drawn over the video.
-- **P30.80 [BUSY]** Build G30.20 ROI editor and G30.30 camera settings: draw, move and resize ROIs, numeric entry, save to config.
+- **P30.10 [DONE]** Design the IPC: a shared-memory ring buffer per camera for preview frames (via `ISharedMemory`, M15), ZeroMQ for commands and events, and a serialization format (FlatBuffers or Protobuf).
+- **P30.20 [DONE]** Build the service-side IPC server: preview downscaler (configurable fps and resolution) and command handler.
+- **P30.30 [DONE]** Build the HMI skeleton: Qt Quick app, navigation bar, `IPage` plugin loader.
+- **P30.40 [DONE]** Build the design system: colours, typography, standard QML components (buttons, numeric inputs, tables, dialogs).
+- **P30.50 [DONE]** Build the video item: a custom `QQuickItem` that renders frames as GPU textures.
+- **P30.60 [DONE]** Build G30.10 Live view: grid of all cameras, single-camera fullscreen, freeze/unfreeze per camera and for all cameras.
+- **P30.70 [DONE]** Build the overlay layer: ROIs, lane lines and detections drawn over the video.
+- **P30.80 [DONE]** Build G30.20 ROI editor and G30.30 camera settings: draw, move and resize ROIs, numeric entry, save to config.
+- **P30.85 [DONE]** Wire cameras into the service (M30.50): camera manager with discovery loop, camera map, saved settings, frame fan-out to the preview hub, `CameraListChanged` event, service options for Daheng and replay.
 - **P30.90** Add connection handling: HMI auto-reconnect and a "service offline" state.
 
 **Done when:** live view of all cameras is smooth, and a GUI crash or restart does not affect the service.
@@ -511,6 +542,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 | Object table (DB) | Lacks encoder position | Schema migration in P130 |
 | SQLite storage | Single-line, limited concurrency | PostgreSQL behind `IStorage` (P180) |
 | G40 Controller page | Status only | Full page in P120 |
+| Frame sinks (M30.50) | Frames go from the camera module to the preview hub by direct callback, not over the message bus (principle 5) | MSG-30-01 on the bus once the pipeline (P40, P60) consumes frames |
 | Cup creation (frame count) | Not encoder based | Encoder-created cups (P130.35) |
 | Sensor offset (cups) | Cups, not encoder counts | Encoder counts (P130.35) |
 

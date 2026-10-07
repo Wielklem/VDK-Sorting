@@ -23,6 +23,7 @@ inline constexpr std::uint16_t kDefaultEventPort = 5556;
 inline constexpr std::string_view kTopicHeartbeat = "hb";
 inline constexpr std::string_view kTopicConfig = "cfg";
 inline constexpr std::string_view kTopicPreview = "preview";
+inline constexpr std::string_view kTopicCamera = "cam";
 
 struct EnvelopeFields {
     fb::MsgType type{fb::MsgType::Hello};

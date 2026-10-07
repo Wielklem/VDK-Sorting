@@ -1,7 +1,10 @@
 find_package(cppzmq CONFIG REQUIRED)
 
 add_executable(vsort_service_tests
+  test_camera_manager.cpp
+  test_camera_wiring.cpp
   test_cli.cpp
+  test_cli_camera.cpp
   test_command_handler.cpp
   test_downscale.cpp
   test_ipc_server.cpp

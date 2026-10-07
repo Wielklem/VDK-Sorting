@@ -257,6 +257,9 @@ void ServiceClient::handleMessage(std::span<const std::uint8_t> bytes) {
             emit cameraSettingsApplied();
         }
         break;
+    case fb::Payload::CameraListChangedEvent:
+        requestCameraList(); // a camera appeared, disappeared or changed state
+        break;
     default:
         break; // not needed by the live view
     }

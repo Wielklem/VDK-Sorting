@@ -1,6 +1,7 @@
 add_executable(vsort_camera_tests
   test_camera_interface.cpp
   test_camera_map.cpp
+  test_camera_settings_config.cpp
   test_discovery.cpp
   test_frame_pool.cpp
   test_genicam.cpp
