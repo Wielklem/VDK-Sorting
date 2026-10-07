@@ -16,6 +16,7 @@
 
 #include "live/camera_settings_model.hpp"
 #include "live/live_view_model.hpp"
+#include "live/product_monitor_model.hpp"
 #include "live/roi_editor_model.hpp"
 #include "live/service_client.hpp"
 
@@ -62,6 +63,8 @@ int main(int argc, char* argv[]) {
     vsort::hmi::RoiEditorModel roiEditor{serviceClient};
     // NOLINTNEXTLINE(misc-const-correctness): QML calls non-const invokables
     vsort::hmi::CameraSettingsModel cameraSettings{serviceClient};
+    // NOLINTNEXTLINE(misc-const-correctness): QML calls non-const invokables
+    vsort::hmi::ProductMonitorModel productMonitor{serviceClient};
     if (!gallery) {
         const auto loaded = vsort::hmi::loadPagePlugins(vsort::hmi::defaultPluginDir(), registry);
         for (const auto& error : loaded.errors) {
@@ -78,6 +81,7 @@ int main(int argc, char* argv[]) {
         engine.rootContext()->setContextProperty(QStringLiteral("liveView"), &liveView);
         engine.rootContext()->setContextProperty(QStringLiteral("roiEditor"), &roiEditor);
         engine.rootContext()->setContextProperty(QStringLiteral("cameraSettings"), &cameraSettings);
+        engine.rootContext()->setContextProperty(QStringLiteral("productMonitor"), &productMonitor);
         serviceClient.start();
     } else if (selfTest) {
         engine.setInitialProperties({{QStringLiteral("selfTest"), true}});

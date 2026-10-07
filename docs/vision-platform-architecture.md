@@ -296,6 +296,24 @@ V1 shortcuts (compared to the final implementation):
 - **Measurements** are in the message (`measurements: [key, value]`) but stay empty until P60.
 - **Read once.** The machine config is read at start; restart after editing it.
 - **Code defaults.** The pass margin (3 cups), depth (50) and update interval (100 ms) are not configurable yet.
+
+### 40.55 Product Monitor page (G140.10, P80.110)
+
+Page plugin `hmi/pages/product_monitor` (pageId G140, order 140); model `ProductMonitorModel` in `hmi/src/live` (QML context property `productMonitor`).
+
+- **Lanes and columns.** From the `machine` config (GetConfig on connect): lane dropdown; per sensor with `show_in_monitor` a photo column (sensor name) and one column per measurement ("label [unit]"). The first column is the lane cup ID.
+- **Cells.** Photo: "photo OK" (green), red "no data", empty while the cup has not reached the sensor. Measurements: "–" until P60 delivers values.
+- **Rows.** Newest cup on top, up to the depth the service reports (50). Updated in place (insert at the top, remove at the bottom), so the view keeps its delegates.
+- **Sync.** On connect: GetConfig("machine") and GetCupSnapshot(all lanes). Updates with seq ≤ the lane's seq are dropped; before the first snapshot or after a gap in seq a new snapshot is requested (one in flight, retried after 1 s).
+- **Freeze.** Bottom-right button Freeze / Back to live. Frozen: the table holds still while data keeps arriving; back to live shows the current state. Choosing another lane goes back to live.
+- **States.** "Service offline", "Loading the machine config…", "Machine config invalid: …", "No lanes in the machine config" and "No cups yet" replace the table.
+- **Tests.** Model tests against FakeService (`vsort_hmi_live_tests`, also on Windows); offscreen GUI test of the real page (`vsort_hmi_gui_tests`, Linux).
+
+V1 shortcuts (compared to the final implementation):
+- **Read on connect.** The machine config is read when the HMI connects; after editing it, restart the service (the HMI reconnects and reads it again).
+- **Display only.** No row selection, cup details, photos or export; no column order or width settings.
+- **Freeze per lane.** Switching lanes leaves the frozen view.
+- **No history.** Only the last 50 cups the service keeps; nothing from before a service restart.
 ---
 
 ## 50. Controller (own PLC/PCB): final version only
@@ -339,7 +357,7 @@ Each page is a QML plugin with tabs. Visibility depends on controller capabiliti
 | **G110 Lights** | G110.10 Strobe timing [LATER] · G110.20 Intensity [LATER] | [LATER] |
 | **G120 Timing & calibration** | G120.10 Encoder ↔ photo [LATER] · G120.20 Encoder ↔ roller ↔ tipper [LATER] · G120.30 Tipper test/jog [LATER] | [LATER] |
 | **G130 Machine state** | G130.10 Run/stop/fault [PARTIAL] · G130.20 Safe-state policy [LATER] | [PARTIAL] |
-| **G140 Product monitor** | G140.10 Live cup table per lane [V1] (lane dropdown, last 50 cups, newest on top, columns from Sensor config, red "no data" cells, freeze / back-to-live button bottom corner) · G140.20 Offset calibration [V1] (step one cup through an empty machine, read the offset per sensor) | [V1] |
+| **G140 Product monitor** | G140.10 Live cup table per lane [V1] [DONE P80.110] (lane dropdown, last 50 cups, newest on top, columns from Sensor config, red "no data" cells, freeze / back-to-live button bottom corner) · G140.20 Offset calibration [V1] (step one cup through an empty machine, read the offset per sensor) | [V1] |
 
 ---
 
@@ -506,7 +524,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P80.80** Add CSV export. [PARTIAL]
 - **P80.90** Add a disk-space guard and basic cleanup. [PARTIAL]
 - **P80.100 [PARTIALLY_DONE]** Service: per-lane cup buffer (last 50), lane cup ID = sensor count − sensor offset, publish MSG-50-02 on topic `cups`, GetCupSnapshot for the HMI (section 40.50).
-- **P80.110** Build G140.10 Product monitor: dynamic columns from Sensor config, red "no data" cells, freeze / back-to-live button.
+- **P80.110 [PARTIALLY_DONE]** Build G140.10 Product monitor: dynamic columns from Sensor config, red "no data" cells, freeze / back-to-live button (section 40.55).
 - **P80.120** Build G140.20 offset calibration (move one cup through an empty machine, set offsets).
 
 **Done when:** a batch report and history are generated from stored data.
@@ -646,6 +664,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 | Miss detection (P40.40) | Timing plus cross-sensor vote; two sensors failing at the same moment cannot be resolved; repairs mark up to 50 cups NoData | Trigger log + encoder give exact cup positions (P130) |
 | Cup numbering (P40.40) | Learned phase per sensor (fraction of a cup) in `tracking_state.json` | Encoder counts per sensor (P130.35) |
 | Cup table (P80.100) | Last 50 cups per lane, in memory only; measurements empty; margin, depth and interval in code | Results DB keeps history (P80.10); measurements from P60 |
+| Product Monitor page (P80.110) | Read-only table; machine config read on connect; freeze ends on lane switch | Cup details with photos, history from the results DB (P80.60/P80.70), column settings |
 
 Everything else is built once and only extended.
 
