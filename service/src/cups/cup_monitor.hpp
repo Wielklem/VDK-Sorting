@@ -14,6 +14,7 @@
 #include <vsort/common/message_bus.hpp>
 #include <vsort/common/module.hpp>
 
+#include "analysis/measurement.hpp"
 #include "cups/cup_table.hpp"
 #include "cups/cup_types.hpp"
 #include "tracking/object_record.hpp"
@@ -23,13 +24,14 @@ namespace vsort::service {
 struct CupMonitorOptions {
     CupTableOptions table;
     std::chrono::milliseconds interval{100}; // updates are batched: at most 10 per second
-    std::size_t queueCapacity{4096};         // ObjectRecords waiting on the bus
+    std::size_t queueCapacity{4096};         // per type (records, measurements) on the bus
     std::chrono::seconds logInterval{10};    // summary per lane in the log, when it changed
 };
 
-// IModule "cups" (P80.100): keeps the last cups per lane (CupTable) from the ObjectRecords on the
-// bus and publishes CupUpdate (MSG-50-02) on the bus at most every `interval`. The IPC server
-// sends those to the HMI and answers snapshot requests through ICupSource.
+// IModule "cups" (P80.100): keeps the last cups per lane (CupTable) from the ObjectRecords and the
+// Measurements (MSG-60-01, P60.15) on the bus and publishes CupUpdate (MSG-50-02) on the bus at
+// most every `interval`. The IPC server sends those to the HMI and answers snapshot requests
+// through ICupSource.
 // Reads the machine config at init; restart the service after editing it.
 class CupMonitor final : public IModule, public ICupSource {
 public:
@@ -61,10 +63,12 @@ private:
     CupMonitorOptions options_;
     MessageBus* bus_{nullptr};
     std::shared_ptr<Subscription<ObjectRecord>> records_;
+    std::shared_ptr<Subscription<Measurement>> measurements_;
     mutable std::mutex mutex_;
     std::optional<CupTable> table_; // guarded by mutex_
     std::jthread thread_;
     std::atomic<std::uint64_t> applied_{0};
+    std::atomic<std::uint64_t> measured_{0};
     std::string lastSummary_; // monitor thread only
 };
 

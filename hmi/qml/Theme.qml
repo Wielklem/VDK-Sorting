@@ -29,5 +29,6 @@ QtObject {
     readonly property int padding: 16
     readonly property int radius: 6
     readonly property int controlHeight: 44
+    readonly property int tableRowHeight: 28 // dense data tables (Product Monitor)
     readonly property int borderWidth: 1
 }

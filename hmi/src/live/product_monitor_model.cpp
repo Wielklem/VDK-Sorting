@@ -2,6 +2,7 @@
 
 #include <QVariantMap>
 #include <algorithm>
+#include <cmath>
 #include <ranges>
 #include <utility>
 
@@ -46,6 +47,34 @@ QString cellText(const CupRowData& cup, std::uint16_t sensorId) {
     return QStringLiteral("pending");
 }
 
+// State and text of a measurement column (see CupRowsModel::Row). Only a cell with a photo has
+// values; the format comes from the measurement catalog.
+std::pair<QString, QString> measurementCell(const CupRowData& cup, std::uint16_t sensorId,
+                                            const QString& key, MeasurementFormat format) {
+    for (const auto& cell : cup.cells) {
+        if (cell.sensorId != sensorId || cell.status != CupCellStatus::Ok) {
+            continue;
+        }
+        for (const auto& m : cell.measurements) {
+            if (m.key != key) {
+                continue;
+            }
+            switch (format) {
+            case MeasurementFormat::Presence:
+                return m.value >= 0.5
+                           ? std::pair{QStringLiteral("present"), QStringLiteral("present")}
+                           : std::pair{QStringLiteral("absent"), QStringLiteral("empty")};
+            case MeasurementFormat::Integer:
+                return {QStringLiteral("value"), QString::number(std::llround(m.value))};
+            case MeasurementFormat::Number:
+                break;
+            }
+            return {QStringLiteral("value"), QString::number(m.value, 'f', 1)};
+        }
+    }
+    return {QStringLiteral("empty"), QString{}};
+}
+
 } // namespace
 
 // ---- CupRowsModel ----
@@ -64,13 +93,15 @@ QVariant CupRowsModel::data(const QModelIndex& index, int role) const {
         return QVariant::fromValue(row.cupId);
     case CellsRole:
         return row.cells;
+    case ValuesRole:
+        return row.values;
     default:
         return {};
     }
 }
 
 QHash<int, QByteArray> CupRowsModel::roleNames() const {
-    return {{CupIdRole, "cupId"}, {CellsRole, "cells"}};
+    return {{CupIdRole, "cupId"}, {CellsRole, "cells"}, {ValuesRole, "values"}};
 }
 
 void CupRowsModel::reset(const QVector<Row>& rows) {
@@ -114,10 +145,10 @@ void CupRowsModel::update(const QVector<Row>& rows) {
             reset(rows);
             return;
         }
-        if (rows_[i].cells != rows[i].cells) {
-            rows_[i].cells = rows[i].cells;
+        if (rows_[i] != rows[i]) {
+            rows_[i] = rows[i];
             const QModelIndex at = index(static_cast<int>(i));
-            emit dataChanged(at, at, {CellsRole});
+            emit dataChanged(at, at, {CellsRole, ValuesRole});
         }
     }
 }
@@ -232,8 +263,10 @@ void ProductMonitorModel::onConfigReceived(const QString& module, const QByteArr
                     if (!m.unit.empty()) {
                         title += QStringLiteral(" [%1]").arg(toQString(m.unit));
                     }
-                    l.columns.push_back(
-                        {.sensorId = s.id, .key = toQString(m.key), .title = std::move(title)});
+                    l.columns.push_back({.sensorId = s.id,
+                                         .key = toQString(m.key),
+                                         .title = std::move(title),
+                                         .format = m.format});
                 }
             }
             layout.push_back(std::move(l));
@@ -315,9 +348,15 @@ void ProductMonitorModel::refresh() {
             for (const auto& [cupId, cup] : std::ranges::reverse_view(it->second.cups)) {
                 CupRowsModel::Row row{.cupId = cupId, .cells = {}};
                 for (const auto& column : lane->columns) {
-                    row.cells.push_back(column.key.isEmpty()
-                                            ? cellText(cup, column.sensorId)
-                                            : QStringLiteral("empty")); // values come with P60
+                    if (column.key.isEmpty()) {
+                        row.cells.push_back(cellText(cup, column.sensorId));
+                        row.values.push_back(QString{});
+                    } else {
+                        auto [state, text] =
+                            measurementCell(cup, column.sensorId, column.key, column.format);
+                        row.cells.push_back(std::move(state));
+                        row.values.push_back(std::move(text));
+                    }
                 }
                 rows.push_back(std::move(row));
             }

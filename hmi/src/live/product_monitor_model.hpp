@@ -13,6 +13,8 @@
 #include <map>
 #include <vector>
 
+#include <vsort/common/machine_config.hpp>
+
 #include "live/cup_data.hpp"
 #include "live/service_client.hpp"
 
@@ -24,11 +26,15 @@ class CupRowsModel : public QAbstractListModel {
     Q_OBJECT
 
 public:
-    enum Role { CupIdRole = Qt::UserRole + 1, CellsRole };
+    enum Role { CupIdRole = Qt::UserRole + 1, CellsRole, ValuesRole };
 
+    // One entry per column in `cells` and `values`. Photo columns: "ok", "nodata", "pending".
+    // Measurement columns: "value", "present", "absent" (with the text in `values`), or "empty"
+    // (no value: no photo yet, no data, or not measured).
     struct Row {
         qint64 cupId{0};
-        QStringList cells; // one per column: "ok", "nodata", "pending" or "empty"
+        QStringList cells;
+        QStringList values{};
 
         bool operator==(const Row&) const = default;
     };
@@ -103,6 +109,7 @@ private:
         std::uint16_t sensorId{0};
         QString key; // empty: the photo column
         QString title;
+        MeasurementFormat format{MeasurementFormat::Number};
     };
     struct LaneLayout {
         std::uint16_t id{0};

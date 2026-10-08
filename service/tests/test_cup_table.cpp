@@ -156,3 +156,42 @@ TEST(CupTable, LanesAreSeparate) {
     ASSERT_EQ(updates.size(), 1U);
     EXPECT_EQ(updates[0].laneId, 2);
 }
+
+TEST(CupTable, MeasurementsBelongToThePhotoOfTheCell) {
+    CupTable t{machine()};
+    auto photo = rec(3, 1);
+    photo.frameId = FrameId{30};
+    ASSERT_TRUE(t.apply(photo));
+    (void)t.takeUpdates();
+
+    const Measurement m{.laneId = 1,
+                        .cupId = 3,
+                        .sensorId = 1,
+                        .cameraId = 0,
+                        .frameId = FrameId{30},
+                        .values = {{"count", 1.0}, {"width_mm", 42.5}}};
+    EXPECT_TRUE(t.apply(m));
+    auto updates = t.takeUpdates();
+    ASSERT_EQ(updates.size(), 1U);
+    ASSERT_EQ(updates[0].cups.size(), 1U);
+    EXPECT_EQ(updates[0].cups[0].cells[0].measurements, m.values);
+    EXPECT_TRUE(t.apply(m)); // same values: no update
+    EXPECT_TRUE(t.takeUpdates().empty());
+
+    auto other = m;
+    other.frameId = FrameId{31}; // not the photo of the cell
+    EXPECT_FALSE(t.apply(other));
+    other = m;
+    other.cupId = 99; // unknown cup: not created
+    EXPECT_FALSE(t.apply(other));
+    other = m;
+    other.sensorId = 2; // pending cell, no photo
+    EXPECT_FALSE(t.apply(other));
+    EXPECT_EQ(t.ignoredMeasurements(), 3U);
+
+    EXPECT_TRUE(t.apply(rec(3, 1, PhotoStatus::NoData))); // correction clears them
+    updates = t.takeUpdates();
+    ASSERT_EQ(updates.size(), 1U);
+    EXPECT_TRUE(updates[0].cups[0].cells[0].measurements.empty());
+    EXPECT_FALSE(t.apply(m));
+}

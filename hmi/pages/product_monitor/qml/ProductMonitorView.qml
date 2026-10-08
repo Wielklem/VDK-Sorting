@@ -3,17 +3,18 @@ import QtQuick
 import QtQuick.Controls.Basic
 import VsortHmi
 
-// G140.10 Product monitor (P80.110): the last cups of one lane, newest on top. Per sensor a photo
-// column ("photo OK" or red "no data"; empty while the cup has not reached the sensor) plus its
-// measurement columns (empty until the analysis stages exist). Columns follow the machine config.
+// G140.10 Product monitor (P80.110, P60.15): the last cups of one lane, newest on top. Per sensor a
+// photo column ("photo OK" or red "no data"; empty while the cup has not reached the sensor) plus
+// its measurement columns ("–" until the analysis delivered a value; "present"/"empty" for a
+// presence column). Columns follow the machine config.
 Rectangle {
     id: page
 
     required property var monitor // ProductMonitorModel
 
-    readonly property int cupColumnWidth: 110
-    readonly property int cellHeight: Theme.controlHeight
-    readonly property real cellWidth: Math.max(110, (list.width - page.cupColumnWidth) / Math.max(1, page.monitor.columns.length))
+    readonly property int cupColumnWidth: 90
+    readonly property int cellHeight: Theme.tableRowHeight
+    readonly property real cellWidth: Math.max(90, (list.width - page.cupColumnWidth) / Math.max(1, page.monitor.columns.length))
     readonly property bool ready: page.monitor.status === ""
 
     component HeaderCell: Rectangle {
@@ -159,6 +160,7 @@ Rectangle {
             required property int index
             required property var cupId
             required property var cells
+            required property var values
 
             readonly property color rowColor: rowItem.index % 2 === 0 ? Theme.surface : Theme.surfaceRaised
 
@@ -176,6 +178,7 @@ Rectangle {
                     anchors.leftMargin: Theme.spacing
                     verticalAlignment: Text.AlignVCenter
                     wrapMode: Text.NoWrap
+                    variant: VsText.Caption
                     text: String(rowItem.cupId)
                 }
             }
@@ -185,9 +188,11 @@ Rectangle {
                 delegate: Rectangle {
                     id: cell
 
+                    required property int index
                     required property string modelData
+                    readonly property bool measured: cell.modelData === "value" || cell.modelData === "present" || cell.modelData === "absent"
 
-                    objectName: cell.modelData === "nodata" ? "noDataCell" : (cell.modelData === "ok" ? "okCell" : "cell")
+                    objectName: cell.modelData === "nodata" ? "noDataCell" : (cell.modelData === "ok" ? "okCell" : (cell.measured ? "valueCell" : "cell"))
                     width: page.cellWidth
                     height: page.cellHeight
                     color: cell.modelData === "nodata" ? Theme.error : rowItem.rowColor
@@ -198,7 +203,21 @@ Rectangle {
                         anchors.centerIn: parent
                         wrapMode: Text.NoWrap
                         variant: VsText.Caption
-                        color: cell.modelData === "nodata" ? Theme.textOnAccent : (cell.modelData === "ok" ? Theme.ok : Theme.textDisabled)
+                        color: {
+                            switch (cell.modelData) {
+                            case "nodata":
+                                return Theme.textOnAccent;
+                            case "ok":
+                            case "present":
+                                return Theme.ok;
+                            case "value":
+                                return Theme.textPrimary;
+                            case "absent":
+                                return Theme.textSecondary;
+                            default:
+                                return Theme.textDisabled;
+                            }
+                        }
                         text: {
                             switch (cell.modelData) {
                             case "ok":
@@ -207,6 +226,10 @@ Rectangle {
                                 return "no data";
                             case "empty":
                                 return "–";
+                            case "value":
+                            case "present":
+                            case "absent":
+                                return rowItem.values[cell.index];
                             default:
                                 return "";
                             }

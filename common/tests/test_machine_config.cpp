@@ -62,10 +62,16 @@ TEST(MachineConfig, RoundTrip) {
     sensors(config)[3]["show_in_monitor"] = false;
     sensors(config)[0]["measurements"] =
         json::parse(R"([{"key": "size_mm", "label": "Size", "unit": "mm"},
-                        {"key": "dirt_pct", "label": "Dirt", "unit": "%"}])");
+                        {"key": "dirt_pct", "label": "Dirt", "unit": "%"},
+                        {"key": "count", "label": "Count", "unit": "", "format": "integer"},
+                        {"key": "present", "label": "Cup", "unit": "", "format": "presence"}])");
     const auto machine = vsort::MachineConfig::fromJson(config);
     ASSERT_TRUE(machine.has_value()) << machine.error().what();
     EXPECT_EQ(machine->toJson(), config);
+    const auto& m = machine->lines()[0].lanes[0].sensors[0].measurements;
+    EXPECT_EQ(m[0].format, vsort::MeasurementFormat::Number); // not given: number
+    EXPECT_EQ(m[2].format, vsort::MeasurementFormat::Integer);
+    EXPECT_EQ(m[3].format, vsort::MeasurementFormat::Presence);
 }
 
 TEST(MachineConfig, RejectsSchemaViolation) {
@@ -112,6 +118,10 @@ TEST(MachineConfig, RejectsBadMeasurements) {
     EXPECT_NE(message.find("measurements[0].key"), std::string::npos) << message;
     EXPECT_NE(message.find("measurements[2].key: duplicate"), std::string::npos) << message;
     EXPECT_NE(message.find("measurements[2].label: empty"), std::string::npos) << message;
+
+    sensors(config)[0]["measurements"] =
+        json::parse(R"([{"key": "size_mm", "label": "Size", "unit": "mm", "format": "text"}])");
+    EXPECT_NE(errorOf(config).find("format"), std::string::npos);
 }
 
 TEST(MachineConfig, RejectsEmptyLaneAndEmptyName) {

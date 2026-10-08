@@ -68,8 +68,11 @@ bool CupTable::apply(const ObjectRecord& record) {
     auto& cell =
         state.cells[static_cast<std::size_t>(std::distance(lane->sensorIds.begin(), sensor))];
     const auto status = record.status == PhotoStatus::Ok ? CellStatus::Ok : CellStatus::NoData;
-    if (cell.status != status) {
+    const FrameId frame = status == CellStatus::Ok ? record.frameId : FrameId{};
+    if (cell.status != status || cell.frameId != frame) {
         cell.status = status;
+        cell.frameId = frame;
+        cell.measurements.clear(); // another photo: its measurements follow
         lane->dirty.insert(record.cupId);
     }
     while (lane->cups.size() > options_.depth) {
@@ -77,6 +80,32 @@ bool CupTable::apply(const ObjectRecord& record) {
         lane->cups.erase(lane->cups.begin());
     }
     markPassed(*lane);
+    return true;
+}
+
+bool CupTable::apply(const Measurement& m) {
+    const auto lane = std::ranges::find(lanes_, m.laneId, &Lane::laneId);
+    if (lane == lanes_.end()) {
+        ++ignoredMeasurements_;
+        return false;
+    }
+    const auto sensor = std::ranges::find(lane->sensorIds, m.sensorId);
+    const auto found = lane->cups.find(m.cupId);
+    if (sensor == lane->sensorIds.end() || found == lane->cups.end()) {
+        ++ignoredMeasurements_;
+        return false;
+    }
+    auto& cell =
+        found->second
+            .cells[static_cast<std::size_t>(std::distance(lane->sensorIds.begin(), sensor))];
+    if (cell.status != CellStatus::Ok || cell.frameId != m.frameId) {
+        ++ignoredMeasurements_; // stale: the cup got another photo or none
+        return false;
+    }
+    if (cell.measurements != m.values) {
+        cell.measurements = m.values;
+        lane->dirty.insert(m.cupId);
+    }
     return true;
 }
 
