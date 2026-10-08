@@ -303,7 +303,7 @@ Page plugin `hmi/pages/product_monitor` (pageId G140, order 140); model `Product
 
 - **Lanes and columns.** From the `machine` config (GetConfig on connect): lane dropdown; per sensor with `show_in_monitor` a photo column (sensor name) and one column per measurement ("label [unit]"). The first column is the lane cup ID.
 - **Cells.** Photo: "photo OK" (green), red "no data", empty while the cup has not reached the sensor. Measurements (P60.15): the value in the catalog `format` (`number` 1 decimal, `integer`, `presence` = "present"/"empty"); "–" while there is no value (no photo, no data, not measured yet).
-- **Rows.** Compact (`Theme.tableRowHeight`, 28 px), so more cups fit on the screen.
+- **Rows.** Compact (`Theme.tableRowHeight`, 28 px), so more cups fit on the screen. A cup with product (presence column "present") gets a lighter row (`Theme.rowFilled`); empty and not yet measured cups keep the dark rows.
 - **Rows.** Newest cup on top, up to the depth the service reports (50). Updated in place (insert at the top, remove at the bottom), so the view keeps its delegates.
 - **Sync.** On connect: GetConfig("machine") and GetCupSnapshot(all lanes). Updates with seq ≤ the lane's seq are dropped; before the first snapshot or after a gap in seq a new snapshot is requested (one in flight, retried after 1 s).
 - **Freeze.** Bottom-right button Freeze / Back to live. Frozen: the table holds still while data keeps arriving; back to live shows the current state. Choosing another lane goes back to live.

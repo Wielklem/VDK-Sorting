@@ -30,5 +30,6 @@ QtObject {
     readonly property int radius: 6
     readonly property int controlHeight: 44
     readonly property int tableRowHeight: 28 // dense data tables (Product Monitor)
+    readonly property color rowFilled: "#4B5563" // Product Monitor: cup with product
     readonly property int borderWidth: 1
 }

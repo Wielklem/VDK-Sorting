@@ -162,7 +162,11 @@ Rectangle {
             required property var cells
             required property var values
 
-            readonly property color rowColor: rowItem.index % 2 === 0 ? Theme.surface : Theme.surfaceRaised
+            // Cup with product (presence column "present"): lighter row. Empty or not measured: dark.
+            readonly property bool filled: rowItem.cells.indexOf("present") >= 0
+            readonly property color rowColor: rowItem.filled
+                ? (rowItem.index % 2 === 0 ? Theme.rowFilled : Qt.lighter(Theme.rowFilled, 1.1))
+                : (rowItem.index % 2 === 0 ? Theme.surface : Theme.surfaceRaised)
 
             height: page.cellHeight
 
