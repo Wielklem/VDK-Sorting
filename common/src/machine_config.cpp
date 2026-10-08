@@ -20,10 +20,19 @@ std::string idx(std::string_view path, std::string_view member, std::size_t i) {
     return std::string{path} + "." + std::string{member} + "[" + std::to_string(i) + "]";
 }
 
+MeasurementFormat parseFormat(const json& j) {
+    const auto format = j.value("format", std::string{"number"}); // schema enum
+    if (format == "integer") {
+        return MeasurementFormat::Integer;
+    }
+    return format == "presence" ? MeasurementFormat::Presence : MeasurementFormat::Number;
+}
+
 MeasurementDef parseMeasurement(const json& j) {
     return {.key = j.at("key").get<std::string>(),
             .label = j.at("label").get<std::string>(),
-            .unit = j.at("unit").get<std::string>()};
+            .unit = j.at("unit").get<std::string>(),
+            .format = parseFormat(j)};
 }
 
 SensorConfig parseSensor(const json& j) {
@@ -169,7 +178,9 @@ json machineSchema() {
                               "properties": {
                                 "key": {"type": "string"},
                                 "label": {"type": "string"},
-                                "unit": {"type": "string"}
+                                "unit": {"type": "string"},
+                                "format": {"type": "string",
+                                           "enum": ["number", "integer", "presence"]}
                               }
                             }
                           }
@@ -240,8 +251,13 @@ json MachineConfig::toJson() const {
             for (const auto& s : lane.sensors) {
                 json measurements = json::array();
                 for (const auto& m : s.measurements) {
-                    measurements.push_back(
-                        json{{"key", m.key}, {"label", m.label}, {"unit", m.unit}});
+                    json jm{{"key", m.key}, {"label", m.label}, {"unit", m.unit}};
+                    if (m.format == MeasurementFormat::Integer) {
+                        jm["format"] = "integer";
+                    } else if (m.format == MeasurementFormat::Presence) {
+                        jm["format"] = "presence";
+                    }
+                    measurements.push_back(std::move(jm));
                 }
                 sensors.push_back(json{{"id", s.id},
                                        {"name", s.name},

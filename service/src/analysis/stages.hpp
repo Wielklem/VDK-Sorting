@@ -18,7 +18,8 @@ public:
 
 // P60.40: HSV range -> mask -> erode/dilate -> connected components with enclosed holes filled
 // -> filter (min area, diameter, hull area, aspect ratio, solidity) -> an object counts for this
-// cup when the centre of its hull lies inside the lane ROI. Adds "count" and "mask_pct".
+// cup when the centre of its hull lies inside the lane ROI. Adds "count", "present" and
+// "mask_pct".
 class ColorSegmentationStage final : public IAnalysisStage {
 public:
     explicit ColorSegmentationStage(const AnalysisParams& params)

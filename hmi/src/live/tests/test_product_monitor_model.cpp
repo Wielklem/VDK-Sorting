@@ -16,13 +16,13 @@ namespace {
 using namespace vsort::hmi;
 using namespace vsort::hmi::test;
 
-// Lane 1: Camera 1 (with two measurements), Camera 2, Camera 3 hidden. Lane 2: Camera 4.
+// Lane 1: Camera 1 (size and a presence column), Camera 2, Camera 3 hidden. Lane 2: Camera 4.
 const std::string kMachine = R"({"lines": [{"id": 1, "name": "Line 1", "lanes": [
   {"id": 1, "name": "Lane 1", "sensors": [
     {"id": 1, "name": "Camera 1", "kind": "camera", "camera_id": 0, "roi_id": 0,
      "offset_cups": 0, "show_in_monitor": true, "measurements": [
        {"key": "size_mm", "label": "Size", "unit": "mm"},
-       {"key": "dirt", "label": "Dirt", "unit": ""}]},
+       {"key": "present", "label": "Cup", "unit": "", "format": "presence"}]},
     {"id": 2, "name": "Camera 2", "kind": "camera", "camera_id": 1, "roi_id": 0,
      "offset_cups": 5, "show_in_monitor": true, "measurements": []},
     {"id": 3, "name": "Camera 3", "kind": "camera", "camera_id": 2, "roi_id": 0,
@@ -81,7 +81,7 @@ TEST_F(ProductMonitorModelTest, LanesAndColumnsComeFromTheMachineConfig) {
     EXPECT_EQ(lanes[1].toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Lane 2"));
 
     const auto columns = model.columns();
-    ASSERT_EQ(columns.size(), 4); // Camera 1, Size [mm], Dirt, Camera 2 (Camera 3 hidden)
+    ASSERT_EQ(columns.size(), 4); // Camera 1, Size [mm], Cup, Camera 2 (Camera 3 hidden)
     EXPECT_EQ(columns[0].toMap().value(QStringLiteral("title")).toString(),
               QStringLiteral("Camera 1"));
     EXPECT_EQ(columns[0].toMap().value(QStringLiteral("kind")).toString(), QStringLiteral("photo"));
@@ -89,7 +89,7 @@ TEST_F(ProductMonitorModelTest, LanesAndColumnsComeFromTheMachineConfig) {
               QStringLiteral("Size [mm]"));
     EXPECT_EQ(columns[1].toMap().value(QStringLiteral("kind")).toString(),
               QStringLiteral("measurement"));
-    EXPECT_EQ(columns[2].toMap().value(QStringLiteral("title")).toString(), QStringLiteral("Dirt"));
+    EXPECT_EQ(columns[2].toMap().value(QStringLiteral("title")).toString(), QStringLiteral("Cup"));
     EXPECT_EQ(columns[3].toMap().value(QStringLiteral("sensorId")).toInt(), 2);
 }
 
@@ -181,4 +181,26 @@ TEST(CupRowsModel, InPlaceUpdatesKeepRows) {
     rows.update({{.cupId = 20, .cells = {"ok"}}}); // no overlap: reset
     EXPECT_EQ(resets, 1);
     EXPECT_EQ(rows.rowCount(), 1);
+}
+
+TEST_F(ProductMonitorModelTest, MeasurementsShowInTheirColumns) {
+    auto measured = cup(12, CupCellStatus::Ok, CupCellStatus::Pending);
+    measured.cells[0].measurements = {{.key = QStringLiteral("size_mm"), .value = 41.27},
+                                      {.key = QStringLiteral("present"), .value = 1.0}};
+    auto emptyCup = cup(13, CupCellStatus::Ok, CupCellStatus::Pending);
+    emptyCup.cells[0].measurements = {{.key = QStringLiteral("present"), .value = 0.0}};
+    sendUpdate(6, {emptyCup, measured});
+    ASSERT_EQ(model.rowsModel().rowCount(), 4);
+    const auto& rows = model.rowsModel().rows();
+    EXPECT_EQ(rows[0].cells, (QStringList{"ok", "empty", "absent", "pending"})); // cup 13
+    EXPECT_EQ(rows[0].values[2], QStringLiteral("empty"));
+    EXPECT_EQ(rows[1].cells, (QStringList{"ok", "value", "present", "pending"})); // cup 12
+    EXPECT_EQ(rows[1].values[1], QStringLiteral("41.3"));
+    EXPECT_EQ(rows[1].values[2], QStringLiteral("present"));
+    EXPECT_EQ(rows[1].values[0], QString{}); // photo column: no text
+
+    auto lost = measured; // the photo became NoData: its values are not shown
+    lost.cells[0].status = CupCellStatus::NoData;
+    sendUpdate(7, {lost});
+    EXPECT_EQ(cells(1), (QStringList{"nodata", "empty", "empty", "pending"}));
 }

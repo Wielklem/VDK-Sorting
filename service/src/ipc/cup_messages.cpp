@@ -10,8 +10,17 @@ flatbuffers::Offset<fb::Cup> makeCup(flatbuffers::FlatBufferBuilder& fbb, const 
     std::vector<flatbuffers::Offset<fb::CupCell>> cells;
     cells.reserve(cup.cells.size());
     for (const auto& cell : cup.cells) {
-        cells.push_back(
-            fb::CreateCupCell(fbb, cell.sensorId, static_cast<fb::CellStatus>(cell.status)));
+        flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<fb::MeasurementValue>>> values;
+        if (!cell.measurements.empty()) {
+            std::vector<flatbuffers::Offset<fb::MeasurementValue>> list;
+            list.reserve(cell.measurements.size());
+            for (const auto& m : cell.measurements) {
+                list.push_back(fb::CreateMeasurementValue(fbb, fbb.CreateString(m.key), m.value));
+            }
+            values = fbb.CreateVector(list);
+        }
+        cells.push_back(fb::CreateCupCell(fbb, cell.sensorId,
+                                          static_cast<fb::CellStatus>(cell.status), values));
     }
     return fb::CreateCup(fbb, cup.cupId, fbb.CreateVector(cells));
 }

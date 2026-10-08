@@ -73,8 +73,19 @@ QVector<CupRowData> toCups(const flatbuffers::Vector<flatbuffers::Offset<fb::Cup
         row.cupId = cup->cup_id();
         if (const auto* cells = cup->cells(); cells != nullptr) {
             for (const auto* cell : *cells) {
-                row.cells.push_back({.sensorId = cell->sensor_id(),
-                                     .status = static_cast<CupCellStatus>(cell->status())});
+                CupCellData data{.sensorId = cell->sensor_id(),
+                                 .status = static_cast<CupCellStatus>(cell->status())};
+                if (const auto* values = cell->measurements(); values != nullptr) {
+                    for (const auto* m : *values) {
+                        if (m->key() != nullptr) {
+                            data.measurements.push_back(
+                                {.key = QString::fromUtf8(m->key()->c_str(),
+                                                          static_cast<qsizetype>(m->key()->size())),
+                                 .value = m->value()});
+                        }
+                    }
+                }
+                row.cells.push_back(std::move(data));
             }
         }
         out.push_back(std::move(row));

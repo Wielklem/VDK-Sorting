@@ -12,6 +12,7 @@ namespace vsort::service {
 // Measurement keys of the V1 cup pipeline (P60.10). The machine config's measurement catalog
 // (per sensor) picks which of them the Product Monitor shows.
 inline constexpr std::string_view kKeyCount = "count";      // objects centred in the lane ROI
+inline constexpr std::string_view kKeyPresent = "present";  // 1 = count >= 1, else 0
 inline constexpr std::string_view kKeyMaskPct = "mask_pct"; // % of the ROI with object colour
 inline constexpr std::string_view kKeyLength = "length_mm"; // largest object, along its axis
 inline constexpr std::string_view kKeyWidth = "width_mm";   // largest object, across its axis

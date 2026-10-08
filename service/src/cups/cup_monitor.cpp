@@ -27,6 +27,7 @@ Result<> CupMonitor::init(ModuleContext& context) {
     }
     bus_ = &context.bus;
     records_ = bus_->subscribe<ObjectRecord>(options_.queueCapacity);
+    measurements_ = bus_->subscribe<Measurement>(options_.queueCapacity);
     const std::scoped_lock lock{mutex_};
     table_.emplace(*machine, options_.table);
     return {};
@@ -49,14 +50,19 @@ void CupMonitor::stop() noexcept {
 
 Health CupMonitor::health() const {
     std::uint64_t ignored = 0;
+    std::uint64_t ignoredMeasurements = 0;
     {
         const std::scoped_lock lock{mutex_};
         ignored = table_ ? table_->ignored() : 0;
+        ignoredMeasurements = table_ ? table_->ignoredMeasurements() : 0;
     }
-    const std::uint64_t dropped = records_ ? records_->dropped() : 0;
+    const std::uint64_t dropped =
+        (records_ ? records_->dropped() : 0) + (measurements_ ? measurements_->dropped() : 0);
     return Health{.state = dropped > 0 ? HealthState::Degraded : HealthState::Ok,
                   .detail = std::to_string(applied_.load(std::memory_order_relaxed)) +
                             " records, " + std::to_string(ignored) + " ignored, " +
+                            std::to_string(measured_.load(std::memory_order_relaxed)) +
+                            " measurements, " + std::to_string(ignoredMeasurements) + " ignored, " +
                             std::to_string(dropped) + " dropped on the bus"};
 }
 
@@ -66,16 +72,25 @@ std::vector<LaneSnapshot> CupMonitor::snapshot(std::optional<std::uint16_t> lane
 }
 
 void CupMonitor::flush() {
-    if (!records_ || bus_ == nullptr) {
+    if (!records_ || !measurements_ || bus_ == nullptr) {
         return;
     }
     std::vector<CupUpdate> updates;
+    std::vector<Measurement> measurements;
     {
         const std::scoped_lock lock{mutex_};
-        records_->drain([this](const ObjectRecord& r) {
+        const auto applyRecord = [this](const ObjectRecord& r) {
             table_->apply(r);
             applied_.fetch_add(1, std::memory_order_relaxed);
-        });
+        };
+        records_->drain(applyRecord);
+        measurements_->drain([&](const Measurement& m) { measurements.push_back(m); });
+        // A Measurement is published after its record: drain again so those records are in.
+        records_->drain(applyRecord);
+        for (const auto& m : measurements) {
+            table_->apply(m);
+        }
+        measured_.fetch_add(measurements.size(), std::memory_order_relaxed);
         updates = table_->takeUpdates();
     }
     for (const auto& update : updates) {

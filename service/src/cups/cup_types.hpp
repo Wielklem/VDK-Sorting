@@ -4,6 +4,10 @@
 #include <optional>
 #include <vector>
 
+#include <vsort/common/types.hpp>
+
+#include "analysis/measurement.hpp"
+
 namespace vsort::service {
 
 // P80.100: what the Product Monitor shows per cup and sensor.
@@ -16,7 +20,8 @@ enum class CellStatus : std::uint8_t {
 struct CupCell {
     std::uint16_t sensorId{0};
     CellStatus status{CellStatus::Pending};
-    // Measurements (key, value) come with the analysis stages (P60); empty until then.
+    FrameId frameId{}; // the photo (Ok only); a Measurement must be of this frame
+    std::vector<MeasurementValue> measurements{}; // P60.15: from the analysis of that photo
 
     bool operator==(const CupCell&) const = default;
 };

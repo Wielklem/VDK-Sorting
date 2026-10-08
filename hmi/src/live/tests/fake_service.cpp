@@ -15,8 +15,14 @@ cupsOffset(flatbuffers::FlatBufferBuilder& fbb, const QVector<CupRowData>& cups)
     for (const auto& cup : cups) {
         std::vector<flatbuffers::Offset<fb::CupCell>> cells;
         for (const auto& cell : cup.cells) {
-            cells.push_back(
-                fb::CreateCupCell(fbb, cell.sensorId, static_cast<fb::CellStatus>(cell.status)));
+            std::vector<flatbuffers::Offset<fb::MeasurementValue>> values;
+            for (const auto& m : cell.measurements) {
+                values.push_back(fb::CreateMeasurementValue(
+                    fbb, fbb.CreateString(m.key.toStdString()), m.value));
+            }
+            cells.push_back(fb::CreateCupCell(fbb, cell.sensorId,
+                                              static_cast<fb::CellStatus>(cell.status),
+                                              values.empty() ? 0 : fbb.CreateVector(values)));
         }
         out.push_back(fb::CreateCup(fbb, cup.cupId, fbb.CreateVector(cells)));
     }

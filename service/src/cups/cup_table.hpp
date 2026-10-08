@@ -9,6 +9,7 @@
 
 #include <vsort/common/machine_config.hpp>
 
+#include "analysis/measurement.hpp"
 #include "cups/cup_types.hpp"
 #include "tracking/object_record.hpp"
 
@@ -30,8 +31,13 @@ class CupTable {
 public:
     explicit CupTable(const MachineConfig& machine, CupTableOptions options = {});
 
-    // False: ignored (unknown lane or sensor, or older than the window).
+    // False: ignored (unknown lane or sensor, or older than the window). A new photo or NoData
+    // clears the cell's measurements.
     bool apply(const ObjectRecord& record);
+
+    // P60.15: the measurements of a cell. False: ignored (unknown lane, sensor or cup, or not of
+    // the cell's current photo).
+    bool apply(const Measurement& measurement);
 
     // One update per lane with changes since the last call (seq + 1 each).
     [[nodiscard]] std::vector<CupUpdate> takeUpdates();
@@ -40,6 +46,9 @@ public:
     [[nodiscard]] std::vector<LaneSnapshot> snapshot(std::optional<std::uint16_t> laneId) const;
 
     [[nodiscard]] std::uint64_t ignored() const noexcept { return ignored_; }
+    [[nodiscard]] std::uint64_t ignoredMeasurements() const noexcept {
+        return ignoredMeasurements_;
+    }
 
 private:
     struct Lane {
@@ -57,6 +66,7 @@ private:
     CupTableOptions options_;
     std::vector<Lane> lanes_;
     std::uint64_t ignored_{0};
+    std::uint64_t ignoredMeasurements_{0};
 };
 
 } // namespace vsort::service

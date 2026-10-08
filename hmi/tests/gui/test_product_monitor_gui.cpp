@@ -12,6 +12,7 @@
 #include <QVariant>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -25,17 +26,21 @@ namespace {
 using namespace vsort::hmi;
 using namespace vsort::hmi::test;
 
-// One lane: Camera 1 with a "Size" measurement, Camera 2.
+// One lane: Camera 1 with "Size" and "Potatoes" measurements, Camera 2.
 const std::string kMachine = R"({"lines": [{"id": 1, "name": "Line 1", "lanes": [
   {"id": 1, "name": "Lane 1", "sensors": [
     {"id": 1, "name": "Camera 1", "kind": "camera", "camera_id": 0, "roi_id": 0,
      "offset_cups": 0, "show_in_monitor": true,
-     "measurements": [{"key": "size_mm", "label": "Size", "unit": "mm"}]},
+     "measurements": [{"key": "size_mm", "label": "Size", "unit": "mm"},
+                      {"key": "count", "label": "Potatoes", "unit": "", "format": "integer"}]},
     {"id": 2, "name": "Camera 2", "kind": "camera", "camera_id": 1, "roi_id": 0,
      "offset_cups": 5, "show_in_monitor": true, "measurements": []}]}]}]})";
 
-CupRowData cup(std::int64_t id, CupCellStatus s1, CupCellStatus s2) {
-    return {.cupId = id, .cells = {{.sensorId = 1, .status = s1}, {.sensorId = 2, .status = s2}}};
+CupRowData cup(std::int64_t id, CupCellStatus s1, CupCellStatus s2,
+               QVector<MeasurementData> values = {}) {
+    return {.cupId = id,
+            .cells = {{.sensorId = 1, .status = s1, .measurements = std::move(values)},
+                      {.sensorId = 2, .status = s2}}};
 }
 
 // Renders the real G140.10 page (from the source tree) offscreen against a fake service.
@@ -49,7 +54,9 @@ protected:
             {LaneCupsData{.laneId = 1,
                           .seq = 1,
                           .depth = 50,
-                          .cups = {cup(21, CupCellStatus::Ok, CupCellStatus::Pending),
+                          .cups = {cup(21, CupCellStatus::Ok, CupCellStatus::Pending,
+                                       {{.key = QStringLiteral("size_mm"), .value = 41.0},
+                                        {.key = QStringLiteral("count"), .value = 2.0}}),
                                    cup(20, CupCellStatus::Ok, CupCellStatus::NoData)}}});
         client.start();
     }
@@ -119,9 +126,10 @@ TEST_F(ProductMonitorGuiTest, ShowsColumnsRowsAndRedNoDataCells) {
     ASSERT_TRUE(spinUntil([&] { return model.rowsModel().rowCount() == 2; }, [this] { step(); }));
     settle();
 
-    EXPECT_EQ(all("columnHeader").size(), 3); // Camera 1, Size [mm], Camera 2
+    EXPECT_EQ(all("columnHeader").size(), 4); // Camera 1, Size [mm], Potatoes, Camera 2
     EXPECT_EQ(all("okCell").size(), 2);
     EXPECT_EQ(all("noDataCell").size(), 1); // cup 20, Camera 2
+    EXPECT_EQ(all("valueCell").size(), 2);  // cup 21: size and count
     const QQuickItem* list = named("cupList");
     ASSERT_NE(list, nullptr);
     EXPECT_EQ(list->property("count").toInt(), 2);

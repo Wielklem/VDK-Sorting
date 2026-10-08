@@ -205,6 +205,7 @@ Result<> ColorSegmentationStage::process(AnalysisContext& ctx) const {
     std::ranges::sort(ctx.blobs, std::ranges::greater{}, &Blob::areaPx);
 
     ctx.values.push_back({std::string{kKeyCount}, static_cast<double>(ctx.blobs.size())});
+    ctx.values.push_back({std::string{kKeyPresent}, ctx.blobs.empty() ? 0.0 : 1.0});
     ctx.values.push_back({std::string{kKeyMaskPct}, maskPct});
     return {};
 }

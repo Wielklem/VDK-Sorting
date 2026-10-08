@@ -208,7 +208,7 @@ Config module `machine` (`common/include/vsort/common/machine_config.hpp`). V1 e
 lines[]: id, name, lanes[]
   lanes[]: id, name, sensors[]            (sensors upstream first)
     sensors[]: id, name, kind ("camera"), camera_id, roi_id, offset_cups,
-               show_in_monitor, measurements[]: key, label, unit
+               show_in_monitor, measurements[]: key, label, unit, format
 ```
 
 - **IDs.** Line, lane and sensor IDs are 1..65535 and unique in the whole machine, so a lane ID alone identifies a lane in IPC messages and in the Product Monitor.
@@ -293,7 +293,7 @@ HMI connects → GetCupSnapshot → CupMonitor::snapshot()
 
 V1 shortcuts (compared to the final implementation):
 - **In memory only.** The table is empty after a service restart; history comes with the results database (P80.10).
-- **Measurements** are in the message (`measurements: [key, value]`) but stay empty until P60.
+- **Measurements** (P60.15) come from MSG-60-01 and belong to the photo of the cell: a measurement of another frame is ignored, a new photo or NoData clears them.
 - **Read once.** The machine config is read at start; restart after editing it.
 - **Code defaults.** The pass margin (3 cups), depth (50) and update interval (100 ms) are not configurable yet.
 
@@ -302,7 +302,8 @@ V1 shortcuts (compared to the final implementation):
 Page plugin `hmi/pages/product_monitor` (pageId G140, order 140); model `ProductMonitorModel` in `hmi/src/live` (QML context property `productMonitor`).
 
 - **Lanes and columns.** From the `machine` config (GetConfig on connect): lane dropdown; per sensor with `show_in_monitor` a photo column (sensor name) and one column per measurement ("label [unit]"). The first column is the lane cup ID.
-- **Cells.** Photo: "photo OK" (green), red "no data", empty while the cup has not reached the sensor. Measurements: "–" until P60 delivers values.
+- **Cells.** Photo: "photo OK" (green), red "no data", empty while the cup has not reached the sensor. Measurements (P60.15): the value in the catalog `format` (`number` 1 decimal, `integer`, `presence` = "present"/"empty"); "–" while there is no value (no photo, no data, not measured yet).
+- **Rows.** Compact (`Theme.tableRowHeight`, 28 px), so more cups fit on the screen. A cup with product (presence column "present") gets a lighter row (`Theme.rowFilled`); empty and not yet measured cups keep the dark rows.
 - **Rows.** Newest cup on top, up to the depth the service reports (50). Updated in place (insert at the top, remove at the bottom), so the view keeps its delegates.
 - **Sync.** On connect: GetConfig("machine") and GetCupSnapshot(all lanes). Updates with seq ≤ the lane's seq are dropped; before the first snapshot or after a gap in seq a new snapshot is requested (one in flight, retried after 1 s).
 - **Freeze.** Bottom-right button Freeze / Back to live. Frozen: the table holds still while data keeps arriving; back to live shows the current state. Choosing another lane goes back to live.
@@ -326,7 +327,7 @@ join thread: result + ObjectRecord (same sensor and frame ID) → Measurement (M
 |---|---|
 | Pixel access (open point of 40.40) | Frames are analysed on arrival, before tracking knows the cup; the buffer is released when the pipeline is done. Results (64 per sensor) wait for the ObjectRecord with the same sensor and frame ID; a record waits 2 s for its result. A corrected record for the same frame gives a new Measurement. |
 | Stages | `IAnalysisStage`, timed per stage. Preprocess: Mono, Bayer RG, RGB, BGR → BGR. Segmentation (eqraftvision cups mode): HSV range, erode/dilate, fill enclosed holes, filter on area, diameter, hull area, aspect ratio, solidity; an object counts when its hull centre is inside the lane ROI (detection runs in ROI + buffer). Size: orientation from moments, length/width from the hull, largest object. |
-| Keys | `count`, `mask_pct`; `length_mm`, `width_mm`, `area_mm2` only when count ≥ 1. |
+| Keys | `count`, `present` (1 when count ≥ 1, else 0), `mask_pct`; `length_mm`, `width_mm`, `area_mm2` only when count ≥ 1. |
 | Config | Module `analysis`: defaults plus overrides per sensor ID, `enabled`, debug images (`debug_every_n`, `debug_max_images`) in `<data dir>/analysis_debug/sensor_<id>/`. Defaults are the eqraftvision values of the potato test set-up. |
 | Log | Per sensor every 10 s: frames, ms per stage, failures. Join totals when they change. |
 
@@ -335,7 +336,7 @@ V1 shortcuts (compared to the final implementation):
 - **White balance** is not in the camera settings; the default HSV range assumes R 1.2 / G 0.9 / B 2.0 set in the camera.
 - **Read once.** Restart the service after editing `machine`, `rois` or `analysis` (live reload comes with P60.45).
 - **Fixed stage list** until the recipe (P60.20).
-- **Bus only.** Measurements are not in the cup table or the Product Monitor yet (P60.15).
+- **Last value only.** The cup table keeps the measurements of the last 50 cups; history comes with the results database (P80.10).
 - **No production statistics** (own branch with a dashboard later).
 ---
 
@@ -515,7 +516,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 
 #### P60 Analytics (M60, G60)
 - **P60.10 [PARTIALLY_DONE]** Define `IAnalysisStage` and the pipeline runner (one thread per camera, timing per stage); module `analysis`, MSG-60-01, join with ObjectRecords (section 40.60).
-- **P60.15** Measurements into the cup table, IPC (`CupCell.measurements`) and the G140.10 columns.
+- **P60.15 [PARTIALLY_DONE]** Measurements into the cup table, IPC (`CupCell.measurements`) and the G140.10 columns; catalog `format` (number, integer, presence); compact table rows.
 - **P60.20** Store the pipeline definition in the recipe: ordered stages plus parameters.
 - **P60.30 [PARTIALLY_DONE]** Build the preprocessing stage: colour conversion (done), illumination normalisation.
 - **P60.40 [PARTIALLY_DONE]** Build the segmentation stage: object mask per lane ROI (eqraftvision cups mode, HSV range).

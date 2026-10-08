@@ -179,3 +179,41 @@ TEST(CupSnapshotCommand, AnswersFromTheCupSource) {
     }
     EXPECT_TRUE(hasCups);
 }
+
+TEST_F(CupMonitorTest, MeasurementsReachTheUpdatesAndTheIpcMessage) {
+    CupMonitor monitor{store.get()};
+    ModuleContext context{bus};
+    ASSERT_TRUE(monitor.init(context).has_value());
+    auto updates = bus.subscribe<CupUpdate>();
+
+    auto photo = rec(4, 1);
+    photo.frameId = FrameId{40};
+    bus.publish(photo);
+    bus.publish(Measurement{.laneId = 1,
+                            .cupId = 4,
+                            .sensorId = 1,
+                            .cameraId = 0,
+                            .frameId = FrameId{40},
+                            .values = {{"present", 1.0}, {"length_mm", 61.25}}});
+    monitor.flush();
+
+    std::optional<CupUpdate> got;
+    updates->drain([&](const CupUpdate& u) { got = u; });
+    ASSERT_TRUE(got.has_value());
+    const auto& cell = got->cups.at(0).cells.at(0);
+    ASSERT_EQ(cell.measurements.size(), 2U);
+    EXPECT_EQ(cell.measurements[1].key, "length_mm");
+
+    const auto bytes = makeCupUpdateEnvelope(*got);
+    const auto env = ipc::parseEnvelope(bytes);
+    ASSERT_TRUE(env.has_value());
+    const auto* fbCell = (*env)->payload_as_CupUpdateEvent()->cups()->Get(0)->cells()->Get(0);
+    ASSERT_NE(fbCell->measurements(), nullptr);
+    ASSERT_EQ(fbCell->measurements()->size(), 2U);
+    EXPECT_EQ(fbCell->measurements()->Get(1)->key()->str(), "length_mm");
+    EXPECT_DOUBLE_EQ(fbCell->measurements()->Get(1)->value(), 61.25);
+    const auto* noMeasurements =
+        (*env)->payload_as_CupUpdateEvent()->cups()->Get(0)->cells()->Get(1);
+    EXPECT_EQ(noMeasurements->measurements(), nullptr);
+    EXPECT_EQ(monitor.health().state, HealthState::Ok);
+}

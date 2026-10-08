@@ -22,13 +22,18 @@ inline constexpr std::string_view kMachineModule = "machine";
 //       "measurements": [{"key": "size_mm", "label": "Size", "unit": "mm"}]}]}]}]}
 // Sensors are listed upstream first. Lane cup ID = sensor cup counter - offset_cups.
 // roi_id refers to a ROI of that camera in the "rois" module; 0 = whole image.
+// A measurement may have "format": "number" (default, 1 decimal), "integer" or "presence"
+// (0 = "empty", otherwise "present"); it only changes how the Product Monitor shows the value.
 
 enum class SensorKind : std::uint8_t { Camera = 1 };
+
+enum class MeasurementFormat : std::uint8_t { Number = 1, Integer, Presence };
 
 struct MeasurementDef {
     std::string key; // a-z, 0-9, '_'; unique within the sensor
     std::string label;
     std::string unit; // may be empty
+    MeasurementFormat format{MeasurementFormat::Number};
 };
 
 struct SensorConfig {
