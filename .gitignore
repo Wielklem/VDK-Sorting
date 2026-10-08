@@ -38,6 +38,11 @@ venv/
 # --- Runtime data (never in git) ---
 /data/
 /recordings/
+/vsort-recordings/
+/vsort-root/data/
+/vsort-root/log/
+/vsort-root/config/history/
+/vsort-root/config/*.tmp
 /datasets/
 *.log
 *.db

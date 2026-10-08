@@ -1,0 +1,39 @@
+{
+  "author": "default",
+  "data": {
+    "debug_every_n": 0,
+    "debug_max_images": 200,
+    "defaults": {
+      "dilate_iterations": 1,
+      "erode_iterations": 1,
+      "hsv_lower": [
+        60,
+        70,
+        0
+      ],
+      "hsv_upper": [
+        105,
+        170,
+        255
+      ],
+      "max_aspect_ratio": 3.0,
+      "min_blob_area_px": 100,
+      "min_diameter_px": 100.0,
+      "min_hull_area_px": 6000.0,
+      "min_solidity": 0.85,
+      "mm_per_px": 2.0,
+      "morph_kernel_px": 3,
+      "roi_buffer_px": {
+        "bottom": 50,
+        "left": 50,
+        "right": 50,
+        "top": 50
+      },
+      "roi_width_mm": 200.0
+    },
+    "enabled": true,
+    "sensors": []
+  },
+  "time_ns": 1791439072612575835,
+  "version": 1
+}

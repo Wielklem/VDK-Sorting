@@ -1,0 +1,61 @@
+{
+  "author": "hmi",
+  "data": {
+    "cameras": [
+      {
+        "edge": "rising",
+        "exposure_us": 750.0,
+        "gain_db": 10.0,
+        "id": 0,
+        "roi": {
+          "height": 0,
+          "width": 0,
+          "x": 0,
+          "y": 0
+        },
+        "trigger": "hardware"
+      },
+      {
+        "edge": "rising",
+        "exposure_us": 750.0,
+        "gain_db": 15.0,
+        "id": 1,
+        "roi": {
+          "height": 0,
+          "width": 0,
+          "x": 0,
+          "y": 0
+        },
+        "trigger": "hardware"
+      },
+      {
+        "edge": "rising",
+        "exposure_us": 750.0,
+        "gain_db": 6.0,
+        "id": 2,
+        "roi": {
+          "height": 0,
+          "width": 0,
+          "x": 0,
+          "y": 0
+        },
+        "trigger": "hardware"
+      },
+      {
+        "edge": "rising",
+        "exposure_us": 500.0,
+        "gain_db": 14.0,
+        "id": 3,
+        "roi": {
+          "height": 0,
+          "width": 0,
+          "x": 0,
+          "y": 0
+        },
+        "trigger": "hardware"
+      }
+    ]
+  },
+  "time_ns": 1791454809848135390,
+  "version": 24
+}

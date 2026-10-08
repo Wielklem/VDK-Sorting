@@ -1,0 +1,13 @@
+{
+  "author": "camera",
+  "data": {
+    "cameras": [
+      { "id": 0, "serial": "FDN25140003" },
+      { "id": 1, "serial": "FBU26030105" },
+      { "id": 2, "serial": "FDN25140004" },
+      { "id": 3, "serial": "FBU26040114" }
+    ]
+  },
+  "time_ns": 1791377452097208581,
+  "version": 2
+}
