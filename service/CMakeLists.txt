@@ -20,11 +20,18 @@ add_library(vsort_service_core STATIC
   src/tracking/tracking_module.cpp
   src/cups/cup_monitor.cpp
   src/cups/cup_table.cpp
-  src/ipc/cup_messages.cpp)
+  src/ipc/cup_messages.cpp
+  src/analysis/analysis_config.cpp
+  src/analysis/analysis_module.cpp
+  src/analysis/overlay.cpp
+  src/analysis/pipeline.cpp
+  src/analysis/result_join.cpp
+  src/analysis/stages.cpp)
 target_include_directories(vsort_service_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(vsort_service_core
   PUBLIC vsort::common vsort::platform vsort::ipc vsort::camera vsort::replay
-  PRIVATE opencv_core opencv_imgproc unofficial::sqlite3::sqlite3)
+  PUBLIC opencv_core
+  PRIVATE opencv_imgproc opencv_imgcodecs unofficial::sqlite3::sqlite3)
 if(TARGET cppzmq-static)
   target_link_libraries(vsort_service_core PRIVATE cppzmq-static)
 else()

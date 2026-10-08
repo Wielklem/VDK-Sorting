@@ -314,7 +314,31 @@ V1 shortcuts (compared to the final implementation):
 - **Display only.** No row selection, cup details, photos or export; no column order or width settings.
 - **Freeze per lane.** Switching lanes leaves the frozen view.
 - **No history.** Only the last 50 cups the service keeps; nothing from before a service restart.
+
+### 40.60 Analysis (M60, P60.10)
+
+Lives in `service/src/analysis/`.
+grab thread → frame sink → AnalysisModule::submit() → queue per camera (4 frames, drop + count)
+camera thread → per sensor of that camera: lane ROI + buffer → preprocess → segmentation → size
+join thread: result + ObjectRecord (same sensor and frame ID) → Measurement (MSG-60-01) → bus
+
+| Part | Rule |
+|---|---|
+| Pixel access (open point of 40.40) | Frames are analysed on arrival, before tracking knows the cup; the buffer is released when the pipeline is done. Results (64 per sensor) wait for the ObjectRecord with the same sensor and frame ID; a record waits 2 s for its result. A corrected record for the same frame gives a new Measurement. |
+| Stages | `IAnalysisStage`, timed per stage. Preprocess: Mono, Bayer RG, RGB, BGR → BGR. Segmentation (eqraftvision cups mode): HSV range, erode/dilate, fill enclosed holes, filter on area, diameter, hull area, aspect ratio, solidity; an object counts when its hull centre is inside the lane ROI (detection runs in ROI + buffer). Size: orientation from moments, length/width from the hull, largest object. |
+| Keys | `count`, `mask_pct`; `length_mm`, `width_mm`, `area_mm2` only when count ≥ 1. |
+| Config | Module `analysis`: defaults plus overrides per sensor ID, `enabled`, debug images (`debug_every_n`, `debug_max_images`) in `<data dir>/analysis_debug/sensor_<id>/`. Defaults are the eqraftvision values of the potato test set-up. |
+| Log | Per sensor every 10 s: frames, ms per stage, failures. Join totals when they change. |
+
+V1 shortcuts (compared to the final implementation):
+- **mm/px quick fix.** `roi_width_mm` / lane ROI width, only valid while the lane ROI is exactly one cup (200 mm). Replaced by G30.40 calibration (P60.50).
+- **White balance** is not in the camera settings; the default HSV range assumes R 1.2 / G 0.9 / B 2.0 set in the camera.
+- **Read once.** Restart the service after editing `machine`, `rois` or `analysis` (live reload comes with P60.45).
+- **Fixed stage list** until the recipe (P60.20).
+- **Bus only.** Measurements are not in the cup table or the Product Monitor yet (P60.15).
+- **No production statistics** (own branch with a dashboard later).
 ---
+
 
 ## 50. Controller (own PLC/PCB): final version only
 
@@ -490,12 +514,14 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 **Done when:** the full machine is described in the GUI and every change is versioned.
 
 #### P60 Analytics (M60, G60)
-- **P60.10** Define `IAnalysisStage` and the pipeline runner (thread pool per camera, timing per stage).
+- **P60.10 [PARTIALLY_DONE]** Define `IAnalysisStage` and the pipeline runner (one thread per camera, timing per stage); module `analysis`, MSG-60-01, join with ObjectRecords (section 40.60).
+- **P60.15** Measurements into the cup table, IPC (`CupCell.measurements`) and the G140.10 columns.
 - **P60.20** Store the pipeline definition in the recipe: ordered stages plus parameters.
-- **P60.30** Build the preprocessing stage: colour conversion, illumination normalisation.
-- **P60.40** Build the segmentation stage: egg mask per lane ROI.
+- **P60.30 [PARTIALLY_DONE]** Build the preprocessing stage: colour conversion (done), illumination normalisation.
+- **P60.40 [PARTIALLY_DONE]** Build the segmentation stage: object mask per lane ROI (eqraftvision cups mode, HSV range).
+- **P60.45** HSV sliders with live mask preview on the calibrate page; the service reloads `analysis` on ConfigChanged without a restart.
 - **P60.50** Build G30.40 calibration: px→mm from a calibration target, scale per camera.
-- **P60.60** Build the size stage: area, major/minor axis in mm.
+- **P60.60 [PARTIALLY_DONE]** Build the size stage: area, major/minor axis in mm (mm/px via the `roi_width_mm` quick fix until P60.50).
 - **P60.70** Build the dirt % stage: dirt pixel ratio on the shell mask.
 - **P60.80** Add multi-photo aggregation: combine measurements per object (max, mean, worst-case rules).
 - **P60.90** Build the G60 pages: stage list, parameters with live preview, debug overlay per stage.

@@ -14,8 +14,10 @@ add_executable(vsort_service_tests
   test_tracking_module.cpp
   test_speed_handling.cpp
   test_cup_table.cpp
-  test_cup_monitor.cpp)
-target_link_libraries(vsort_service_tests PRIVATE vsort_service_core GTest::gtest_main)
+  test_cup_monitor.cpp
+  test_analysis.cpp)
+target_link_libraries(vsort_service_tests PRIVATE vsort_service_core opencv_imgproc
+  GTest::gtest_main)
 if(TARGET cppzmq-static)
   target_link_libraries(vsort_service_tests PRIVATE cppzmq-static)
 else()

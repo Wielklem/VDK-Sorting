@@ -21,6 +21,8 @@
 #include <vsort/common/version.hpp>
 #include <vsort/platform/paths.hpp>
 
+#include "analysis/analysis_config.hpp"
+#include "analysis/analysis_module.hpp"
 #include "camera/camera_manager.hpp"
 #include "camera/camera_module.hpp"
 #include "camera/replay_backend.hpp"
@@ -174,6 +176,11 @@ int runService(const Options& options, platform::IServiceHost& host) {
         log::shutdown();
         return kExitFailure;
     }
+    if (const auto analysisConfig = registerAnalysisConfig(configStore); !analysisConfig) {
+        spdlog::critical("cannot register analysis config: {}", analysisConfig.error().what());
+        log::shutdown();
+        return kExitFailure;
+    }
     ModuleRegistry registry; // declared after bus and configStore: destroyed before them
     // Modules are added here as they are implemented: registry.add(std::make_unique<...>());
     // Cameras (P30.85): the manager is shared by the IPC server (as ICameraAccess) and the
@@ -235,6 +242,18 @@ int runService(const Options& options, platform::IServiceHost& host) {
         }
         cameras->addFrameSink(
             [trackingModule](const camera::Frame& frame) { trackingModule->submit(frame); });
+        // Analysis (P60.10): a third frame sink. It queues the frame (never blocks) and releases
+        // the buffer as soon as the pipeline is done.
+        auto analysis = std::make_unique<AnalysisModule>(
+            &configStore, AnalysisOptions{.debugDir = paths->dataDir() / "analysis_debug"});
+        AnalysisModule* analysisModule = analysis.get();
+        if (const auto added = registry.add(std::move(analysis)); !added) {
+            spdlog::critical("cannot add analysis module: {}", added.error().what());
+            log::shutdown();
+            return kExitFailure;
+        }
+        cameras->addFrameSink(
+            [analysisModule](const camera::Frame& frame) { analysisModule->submit(frame); });
     }
     if (const auto started = registry.startAll(context); !started) {
         spdlog::critical("module start failed: {}", started.error().what());
