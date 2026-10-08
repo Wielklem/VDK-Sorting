@@ -1,0 +1,24 @@
+{
+  "author": "default",
+  "data": {
+    "baseline_rate": 0.1,
+    "confirm_tolerance": 0.3,
+    "consistency_confirm": 2,
+    "consistency_tolerance": 0.25,
+    "extra_factor": 0.5,
+    "history_intervals": 8,
+    "jump_tolerance": 0.3,
+    "mark_limit": 50,
+    "max_gap_fill": 100,
+    "max_insert": 5,
+    "miss_factor": 1.5,
+    "relearn_after": 10,
+    "stable_intervals": 4,
+    "stable_tolerance": 0.2,
+    "steady_tolerance": 0.1,
+    "stop_timeout_min_ms": 1000,
+    "stop_timeout_periods": 5.0
+  },
+  "time_ns": 1791409711195488239,
+  "version": 1
+}
