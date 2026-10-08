@@ -1,6 +1,6 @@
 // CLI record tool (P20.90): records raw frames from Daheng cameras to a session folder.
-// Needs the Galaxy SDK (VSORT_WITH_GALAXY). Example:
-//   vsort_record --camera 0=<serial> --frames 2000 --label "good eggs, 5 per s"
+// Needs the Galaxy SDK (VSORT_WITH_GALAXY). Example, with the service's saved camera settings:
+//   vsort_record --root <service root> --camera 0=<serial> --frames 2000 --label "good eggs"
 #include <cstddef>
 #include <exception>
 #include <filesystem>
@@ -25,7 +25,10 @@ namespace {
 using namespace vsort;
 using namespace vsort::record;
 
-Result<std::filesystem::path> defaultOutDir() {
+Result<std::filesystem::path> defaultOutDir(const std::filesystem::path& root) {
+    if (!root.empty()) {
+        return platform::makeRootedPaths(root)->dataDir() / "recordings";
+    }
     auto paths = platform::makeStandardPaths(platform::PathScope::User);
     if (!paths) {
         return std::unexpected{std::move(paths.error())};
@@ -93,7 +96,7 @@ int main(int argc, char** argv) {
         }
 
         if (options->outDir.empty()) {
-            auto dir = defaultOutDir();
+            auto dir = defaultOutDir(options->root);
             if (!dir) {
                 std::cerr << "vsort_record: cannot determine the output folder: "
                           << dir.error().what() << "\nhint: pass --out <dir>\n";
@@ -109,13 +112,32 @@ int main(int argc, char** argv) {
             return kExitFailure;
         }
 
-        const RecordPlan plan = makePlan(*options);
-        const camera::DahengOptions daheng{.poolFrames = framePoolSize(plan.queueDepth)};
+        SavedSettings saved;
+        if (!options->root.empty()) {
+            auto loaded = loadSavedSettings(options->root);
+            if (!loaded) {
+                std::cerr << "vsort_record: camera settings: " << loaded.error().what() << '\n';
+                log::shutdown();
+                return kExitFailure;
+            }
+            saved = std::move(*loaded);
+        }
+        const auto plan = makePlan(*options, options->root.empty() ? nullptr : &saved);
+        if (!plan) {
+            std::cerr << "vsort_record: " << plan.error().what() << '\n';
+            log::shutdown();
+            return kExitUsage;
+        }
+        for (const auto& spec : plan->cameras) {
+            std::cout << std::format("cam{} ({}): {}\n", spec.index, spec.serial,
+                                     describeSettings(spec.settings));
+        }
+        const camera::DahengOptions daheng{.poolFrames = framePoolSize(plan->queueDepth)};
         const camera::CameraFactory factory = [daheng] { return camera::makeDahengCamera(daheng); };
 
         std::cout << "Ctrl-C stops the recording.\n";
         const auto report =
-            runRecording(plan, factory, [&host] { return (*host)->stopRequested(); }, std::cout);
+            runRecording(*plan, factory, [&host] { return (*host)->stopRequested(); }, std::cout);
         int exitCode = kExitOk;
         if (!report) {
             std::cerr << "vsort_record: " << report.error().what() << '\n';

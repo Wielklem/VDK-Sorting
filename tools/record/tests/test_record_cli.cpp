@@ -42,9 +42,10 @@ TEST(RecordCli, DefaultsWithOneCamera) {
     EXPECT_EQ(r->cameras[0].index, 0);
     EXPECT_EQ(r->cameras[0].serial, "SN1");
     EXPECT_TRUE(r->outDir.empty());
-    EXPECT_EQ(r->trigger, camera::TriggerMode::Hardware);
-    EXPECT_DOUBLE_EQ(r->exposureUs, 10000.0);
-    EXPECT_DOUBLE_EQ(r->gainDb, 0.0);
+    EXPECT_TRUE(r->root.empty());
+    EXPECT_FALSE(r->trigger.has_value()); // saved setting or default, see makePlan
+    EXPECT_FALSE(r->exposureUs.has_value());
+    EXPECT_FALSE(r->gainDb.has_value());
     EXPECT_EQ(r->duration.count(), 0);
     EXPECT_EQ(r->framesPerCamera, 0U);
     EXPECT_EQ(r->queueDepth, 32U);
@@ -63,11 +64,17 @@ TEST(RecordCli, ParsesAllOptions) {
     EXPECT_EQ(r->label, "first run");
     EXPECT_EQ(r->duration.count(), 30);
     EXPECT_EQ(r->framesPerCamera, 500U);
-    EXPECT_DOUBLE_EQ(r->exposureUs, 2500.5);
-    EXPECT_DOUBLE_EQ(r->gainDb, 3.0);
+    EXPECT_EQ(r->exposureUs, 2500.5);
+    EXPECT_EQ(r->gainDb, 3.0);
     EXPECT_EQ(r->trigger, camera::TriggerMode::FreeRun);
     EXPECT_EQ(r->queueDepth, 64U);
     EXPECT_EQ(r->logLevel, log::Level::Debug);
+}
+
+TEST(RecordCli, ParsesTheServiceRoot) {
+    const auto r = parse({"--camera"sv, "0=SN0"sv, "--root"sv, "machine"sv});
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    EXPECT_EQ(r->root, std::filesystem::path{"machine"});
 }
 
 TEST(RecordCli, NeedsAtLeastOneCamera) {
@@ -89,6 +96,8 @@ TEST(RecordCli, RejectsBadCameraSpecs) {
 TEST(RecordCli, RejectsBadValues) {
     expectRejected({"--camera"sv, "0=A"sv, "--bogus"sv});
     expectRejected({"--camera"sv, "0=A"sv, "--out"sv});
+    expectRejected({"--camera"sv, "0=A"sv, "--root"sv});
+    expectRejected({"--camera"sv, "0=A"sv, "--root="sv});
     expectRejected({"--camera"sv, "0=A"sv, "--trigger"sv, "software"sv});
     expectRejected({"--camera"sv, "0=A"sv, "--exposure-us"sv, "0"sv});
     expectRejected({"--camera"sv, "0=A"sv, "--exposure-us"sv, "abc"sv});

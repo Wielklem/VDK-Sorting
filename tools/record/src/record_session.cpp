@@ -7,8 +7,14 @@
 #include <memory>
 #include <ostream>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <utility>
+
+#include <vsort/camera/camera_settings_config.hpp>
+#include <vsort/common/config_store.hpp>
+#include <vsort/common/message_bus.hpp>
+#include <vsort/platform/paths.hpp>
 
 namespace vsort::record {
 namespace {
@@ -54,12 +60,16 @@ std::unexpected<Error> failed(const CameraSpec& spec, std::string_view step, con
                                              step, error.message));
 }
 
+// Shortcut (P20.95): the applied settings are only kept as text in the session label, not as
+// fields of session.json; enough to see later how a dataset was recorded.
 std::string describeLabel(const RecordPlan& plan) {
-    const char* const trigger =
-        plan.settings.triggerMode == camera::TriggerMode::FreeRun ? "freerun" : "hardware";
-    const std::string settings =
-        std::format("exposure {} us, gain {} dB, trigger {}", plan.settings.exposureUs,
-                    plan.settings.gainDb, trigger);
+    std::string settings;
+    for (const auto& spec : plan.cameras) {
+        if (!settings.empty()) {
+            settings += "; ";
+        }
+        settings += std::format("cam{}: {}", spec.index, describeSettings(spec.settings));
+    }
     return plan.label.empty() ? settings : std::format("{} [{}]", plan.label, settings);
 }
 
@@ -97,14 +107,78 @@ std::size_t framePoolSize(std::size_t queueDepth) noexcept {
     return std::bit_ceil(std::max<std::size_t>(queueDepth, 1)) + kPoolHeadroom;
 }
 
-RecordPlan makePlan(const Options& options) {
+Result<SavedSettings> loadSavedSettings(const std::filesystem::path& root) {
+    const auto paths = platform::makeRootedPaths(root);
+    const auto configDir = paths->configDir();
+    std::error_code ec;
+    if (!std::filesystem::is_directory(configDir, ec)) {
+        return makeError(Errc::NotFound,
+                         std::format("no config folder '{}' (wrong --root?)", configDir.string()));
+    }
+    MessageBus bus; // the store publishes changes; nobody listens here
+    FileConfigStore store{configDir, bus};
+    if (const auto r = camera::registerCameraSettings(store); !r) {
+        return std::unexpected{r.error()};
+    }
+    return camera::loadCameraSettings(store);
+}
+
+std::string describeSettings(const camera::CameraSettings& settings) {
+    std::string trigger;
+    switch (settings.triggerMode) {
+    case camera::TriggerMode::FreeRun:
+        trigger = "freerun";
+        break;
+    case camera::TriggerMode::Software:
+        trigger = "software";
+        break;
+    case camera::TriggerMode::Hardware:
+        trigger = settings.triggerEdge == camera::TriggerEdge::Falling ? "hardware (falling)"
+                                                                       : "hardware (rising)";
+        break;
+    }
+    const auto& roi = settings.roi;
+    const std::string area =
+        roi.width == 0 || roi.height == 0
+            ? std::string{"full"}
+            : std::format("{}x{} at {},{}", roi.width, roi.height, roi.x, roi.y);
+    return std::format("exposure {} us, gain {} dB, trigger {}, roi {}", settings.exposureUs,
+                       settings.gainDb, trigger, area);
+}
+
+Result<RecordPlan> makePlan(const Options& options, const SavedSettings* saved) {
     RecordPlan plan;
     plan.outDir = options.outDir;
     plan.label = options.label;
     plan.cameras = options.cameras;
-    plan.settings.exposureUs = options.exposureUs;
-    plan.settings.gainDb = options.gainDb;
-    plan.settings.triggerMode = options.trigger;
+    for (auto& spec : plan.cameras) {
+        spec.settings = camera::CameraSettings{};
+        if (saved != nullptr) {
+            const auto it = saved->find(spec.index);
+            if (it == saved->end()) {
+                return makeError(Errc::InvalidArgument,
+                                 std::format("camera {}: no saved settings in camera_settings "
+                                             "(set them in the HMI first, or leave out --root)",
+                                             spec.index));
+            }
+            spec.settings = it->second;
+        }
+        if (options.exposureUs) {
+            spec.settings.exposureUs = *options.exposureUs;
+        }
+        if (options.gainDb) {
+            spec.settings.gainDb = *options.gainDb;
+        }
+        if (options.trigger) {
+            spec.settings.triggerMode = *options.trigger;
+        }
+        if (spec.settings.triggerMode == camera::TriggerMode::Software) {
+            return makeError(Errc::InvalidArgument,
+                             std::format("camera {}: software trigger cannot be recorded "
+                                         "(pass --trigger hardware or --trigger freerun)",
+                                         spec.index));
+        }
+    }
     plan.duration = std::chrono::duration_cast<std::chrono::milliseconds>(options.duration);
     plan.framesPerCamera = options.framesPerCamera;
     plan.queueDepth = options.queueDepth;
@@ -135,7 +209,7 @@ Result<RecordReport> runRecording(const RecordPlan& plan, const camera::CameraFa
         if (const auto r = cam.open(spec.serial); !r) {
             return failed(spec, "open", r.error());
         }
-        if (const auto r = cam.applySettings(plan.settings); !r) {
+        if (const auto r = cam.applySettings(spec.settings); !r) {
             return failed(spec, "apply settings", r.error());
         }
         const auto info = cam.info();
