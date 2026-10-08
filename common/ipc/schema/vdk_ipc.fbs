@@ -13,6 +13,7 @@ enum MsgType : uint16 {
   ConfigChanged = 2001,        // MSG-20-01
   PreviewStreamChanged = 3001, // MSG-30-01
   CameraListChanged = 3002,    // MSG-30-02
+  CameraRates = 3003,          // MSG-30-03, topic "cam" (P30.86)
   Hello = 3010,
   GetCameraList = 3011,
   SetPreview = 3012,
@@ -87,6 +88,15 @@ table PreviewStreamChangedEvent {
 // The camera list or a camera state changed: ask GetCameraList again.
 table CameraListChangedEvent {}
 
+// P30.86: about once per second, per camera with a sensor. Rates are measured in the service:
+// frames delivered to the analysis, and frames analysed without error.
+table CameraRate {
+  camera_id: uint16;
+  incoming_fps: float;
+  analysed_fps: float;
+}
+table CameraRatesEvent { cameras: [CameraRate]; }
+
 // ---- Tracking (P40.10) ----
 enum PhotoStatus : uint8 { Ok = 1, NoData = 2 }
 
@@ -155,7 +165,8 @@ union Payload {
   GetConfigRequest, ConfigReply, SetConfigRequest,
   HeartbeatEvent, ConfigChangedEvent, PreviewStreamChangedEvent, CameraListChangedEvent,
   ObjectRecord,
-  CupUpdateEvent, GetCupSnapshotRequest, CupSnapshotReply
+  CupUpdateEvent, GetCupSnapshotRequest, CupSnapshotReply,
+  CameraRatesEvent
 
 }
 

@@ -17,8 +17,10 @@
 #include <vsort/common/config_store.hpp>
 #include <vsort/common/message_bus.hpp>
 #include <vsort/common/module.hpp>
+#include <vsort/common/timestamp.hpp>
 
 #include "analysis/analysis_config.hpp"
+#include "analysis/camera_rates.hpp"
 #include "analysis/pipeline.hpp"
 #include "analysis/result_join.hpp"
 #include "tracking/frame_sequence_tracker.hpp"
@@ -32,12 +34,14 @@ struct AnalysisOptions {
     std::chrono::seconds logInterval{10}; // run time per sensor in the log
     JoinOptions join;
     std::filesystem::path debugDir; // annotated images (debug_every_n); empty = never
+    std::chrono::milliseconds ratesInterval{1000}; // CameraRates on the bus (P30.86)
 };
 
 // IModule "analysis" (M60, P60.10). Frames come in through submit() (a camera frame sink) and are
 // analysed right away on one thread per camera, for every sensor (lane ROI) of that camera; the
 // frame buffer is released when the pipeline is done. A join thread pairs the results with the
-// ObjectRecords on the bus and publishes Measurements (MSG-60-01).
+// ObjectRecords on the bus and publishes Measurements (MSG-60-01) and, every ratesInterval, the
+// incoming and analysed frame rate per camera (CameraRates, P30.86).
 // Reads "machine", "rois" and "analysis" at init; restart the service after editing them.
 class AnalysisModule final : public IModule {
 public:
@@ -97,7 +101,14 @@ private:
         std::uint16_t cameraId{0};
         std::vector<SensorRuntime> sensors;
         BoundedQueue<camera::Frame> queue;
+        std::atomic<std::uint64_t> received{0};   // frames submitted (incoming)
+        std::atomic<std::uint64_t> analysedOk{0}; // frames every sensor analysed without error
         std::jthread thread;
+    };
+
+    struct RateCounts {
+        std::uint64_t received{0};
+        std::uint64_t analysedOk{0};
     };
 
     void runWorker(Worker& worker, const std::stop_token& stop);
@@ -105,6 +116,7 @@ private:
     void saveDebug(SensorRuntime& sensor, const camera::Frame& frame, const AnalysisContext& ctx);
     static void logWindow(std::uint16_t cameraId, SensorRuntime& sensor);
     void runJoin(const std::stop_token& stop);
+    void publishRates(Timestamp::duration elapsed, std::map<std::uint16_t, RateCounts>& last);
 
     const IConfigStore* config_{nullptr};
     AnalysisOptions options_;

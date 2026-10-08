@@ -233,3 +233,16 @@ TEST_F(IpcServerTest, CupUpdatesGoOutOnTheCupsTopic) {
     EXPECT_EQ(event->seq(), 4U);
     EXPECT_EQ(event->cups()->Get(0)->cup_id(), 12);
 }
+
+TEST_F(IpcServerTest, CameraRatesGoOutOnTheCameraTopic) {
+    bus.publish(CameraRates{.cameras = {{.cameraId = 2, .incomingFps = 10.0, .analysedFps = 9.5}}});
+    const auto e = waitTopic(sub, ipc::kTopicCamera, 3s);
+    ASSERT_TRUE(e.has_value());
+    EXPECT_EQ(e->env->msg_type(), static_cast<std::uint16_t>(fb::MsgType::CameraRates));
+    const auto* event = e->env->payload_as_CameraRatesEvent();
+    ASSERT_NE(event, nullptr);
+    ASSERT_EQ(event->cameras()->size(), 1U);
+    EXPECT_EQ(event->cameras()->Get(0)->camera_id(), 2);
+    EXPECT_FLOAT_EQ(event->cameras()->Get(0)->incoming_fps(), 10.0F);
+    EXPECT_FLOAT_EQ(event->cameras()->Get(0)->analysed_fps(), 9.5F);
+}

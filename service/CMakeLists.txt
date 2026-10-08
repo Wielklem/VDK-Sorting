@@ -21,6 +21,7 @@ add_library(vsort_service_core STATIC
   src/cups/cup_monitor.cpp
   src/cups/cup_table.cpp
   src/ipc/cup_messages.cpp
+  src/ipc/rate_messages.cpp
   src/analysis/analysis_config.cpp
   src/analysis/analysis_module.cpp
   src/analysis/overlay.cpp

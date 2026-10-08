@@ -164,6 +164,7 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | MSG-20-01 | ConfigChanged | [V1] |
 | MSG-30-01 | Frame (ID, camera, timestamp, buffer ref) | [V1] |
 | MSG-30-02 | CameraListChanged (event, no payload) | [V1] |
+| MSG-30-03 | CameraRates: per camera with a sensor, frames in and frames analysed per second (about 1 Hz, from the analysis module; topic `cam`) | [V1] |
 | MSG-50-01 | ObjectRecord (V1: lane, cup ID, sensor, photo or NO_DATA; one record per sensor and cup) | [V1][REDO] becomes one record per object with all photos and the encoder position |
 | MSG-50-02 | CupUpdate: the changed cups of one lane (cup ID, per sensor Pending/Ok/NoData + measurements) with seq; GetCupSnapshot gives the last 50 cups per lane (section 40.50) | [V1] |
 | MSG-60-01 | Measurement | [V1] |
@@ -199,6 +200,7 @@ Rules:
 - **Replay** (`--replay <session>`). It uses a fixed map from the recorded indices and neither reads nor writes `camera_map` or `camera_settings`.
 - **Record tool** (`vsort_record --root <dir>`, P20.95). It loads `camera_settings` of that service root and applies them per logical camera ID (exposure, gain, trigger, edge, ROI); `--exposure-us`, `--gain-db` and `--trigger` override them for all cameras. A camera without saved settings, or with a software trigger, stops the tool before a session is created. The service must be stopped (a camera opens in one process only). Shortcuts: serials are still given with `--camera <id>=<serial>` (`camera_map` is not read); the applied settings are stored only as text in the session label, not as fields of `session.json`; if `camera_settings` does not exist yet, the config store creates it with its defaults (no cameras).
 - **Change events.** Changes of the camera list or of a camera state are announced with the event `CameraListChanged` (MSG-30-02). The HMI then fetches the list again.
+- **Frame rates** (P30.86). The live view shows per camera the frames that came in and the frames analysed without error (MSG-30-03), measured in the service over about 1 s. The preview is a downscaled copy limited to 15 fps by default and is not used for the rates. Shortcuts: rates come from the analysis module, so a camera without a sensor, or any camera while the analysis is disabled, shows "–"; the shown size is that of the preview, not of the camera.
 - **Open limits.** The camera map is read once at start (editing it at runtime comes with G20.20). The HMI settings page does not edit trigger mode yet.
 
 ### 40.30 Machine model (M20, P50.10)
@@ -489,6 +491,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P30.70 [DONE]** Build the overlay layer: ROIs, lane lines and detections drawn over the video.
 - **P30.80 [DONE]** Build G30.20 ROI editor and G30.30 camera settings: draw, move and resize ROIs, numeric entry, save to config.
 - **P30.85 [DONE]** Wire cameras into the service (M30.50): camera manager with discovery loop, camera map, saved settings, frame fan-out to the preview hub, `CameraListChanged` event, service options for Daheng and replay.
+- **P30.86 [DONE]** Live view shows the real frame rates (in and analysed, MSG-30-03) instead of the preview rate; preview default 15 fps.
 - **P30.90** Add connection handling: HMI auto-reconnect and a "service offline" state.
 
 **Done when:** live view of all cameras is smooth, and a GUI crash or restart does not affect the service.

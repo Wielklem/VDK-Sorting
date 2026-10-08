@@ -134,6 +134,7 @@ void AnalysisModule::submit(const camera::Frame& frame) noexcept {
     if (it == workers_.end()) {
         return; // no sensor uses this camera
     }
+    it->second->received.fetch_add(1, std::memory_order_relaxed);
     camera::Frame kept = frame;
     if (!kept.owner) { // pixels only valid during the callback: keep a copy
         try {
@@ -174,6 +175,7 @@ void AnalysisModule::analyse(Worker& worker, const camera::Frame& frame) {
     const auto& meta = frame.meta;
     const auto alignment = cropAlignment(meta.pixelFormat);
     std::vector<StageTiming> timings;
+    bool allOk = true;
     for (auto& s : worker.sensors) {
         ++s.frames;
         auto& w = s.window;
@@ -197,6 +199,7 @@ void AnalysisModule::analyse(Worker& worker, const camera::Frame& frame) {
         if (!ok) {
             ++w.failed;
             w.lastError = ok.error().what();
+            allOk = false;
             continue;
         }
         if (analysisConfig_.debugEveryN > 0 && !options_.debugDir.empty() &&
@@ -210,6 +213,9 @@ void AnalysisModule::analyse(Worker& worker, const camera::Frame& frame) {
         }
     }
     analysed_.fetch_add(1, std::memory_order_relaxed);
+    if (allOk) {
+        worker.analysedOk.fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 // <debugDir>/sensor_<id>/<wall clock ns>_f<frame id>.jpg; names sort by time.
@@ -284,6 +290,8 @@ void AnalysisModule::runJoin(const std::stop_token& stop) {
     auto nextLog = nextExpire + options_.logInterval;
     std::uint64_t loggedJoined = 0;
     std::uint64_t loggedExpired = 0;
+    std::map<std::uint16_t, RateCounts> rateCounts;
+    auto lastRates = nextExpire;
     while (!stop.stop_requested()) {
         std::size_t handled = 0;
         while (auto result = results_.tryPop()) {
@@ -315,10 +323,36 @@ void AnalysisModule::runJoin(const std::stop_token& stop) {
             }
             nextLog = now + options_.logInterval;
         }
+        if (now - lastRates >= options_.ratesInterval) {
+            publishRates(now - lastRates, rateCounts);
+            lastRates = now;
+        }
         if (handled == 0) {
             std::this_thread::sleep_for(1ms);
         }
     }
+}
+
+// Rates over the time since the last call; `last` keeps the counters of that call.
+void AnalysisModule::publishRates(Timestamp::duration elapsed,
+                                  std::map<std::uint16_t, RateCounts>& last) {
+    const double seconds = std::chrono::duration<double>(elapsed).count();
+    if (seconds <= 0.0) {
+        return;
+    }
+    CameraRates rates;
+    rates.cameras.reserve(workers_.size());
+    for (const auto& [id, worker] : workers_) {
+        const RateCounts now{.received = worker->received.load(std::memory_order_relaxed),
+                             .analysedOk = worker->analysedOk.load(std::memory_order_relaxed)};
+        RateCounts& before = last[id];
+        rates.cameras.push_back(CameraRate{
+            .cameraId = id,
+            .incomingFps = static_cast<double>(now.received - before.received) / seconds,
+            .analysedFps = static_cast<double>(now.analysedOk - before.analysedOk) / seconds});
+        before = now;
+    }
+    bus_->publish(rates);
 }
 
 } // namespace vsort::service

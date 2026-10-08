@@ -31,4 +31,11 @@ struct CameraSettingsData {
     bool triggerRising{true};
 };
 
+// P30.86: frame rates measured in the service (CameraRatesEvent, MSG-30-03).
+struct CameraRateData {
+    std::uint16_t cameraId{0};
+    double incomingFps{0.0}; // frames the camera delivered to the analysis
+    double analysedFps{0.0}; // frames analysed without error
+};
+
 } // namespace vsort::hmi

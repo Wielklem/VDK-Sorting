@@ -26,12 +26,14 @@ inline constexpr std::uint32_t kMaxPreviewWidth = 4096;
 
 struct PreviewSettings {
     bool enabled{false};
-    std::uint16_t fps{10};
+    std::uint16_t fps{15};
     std::uint32_t maxWidth{640};
 };
 
+// P30.86: 15 fps, so a 10 Hz camera is not thinned out by the fps limit (that limit only shapes
+// the live picture; the frame rates shown in the HMI come from CameraRates).
 struct PreviewDefaults {
-    std::uint16_t fps{10};
+    std::uint16_t fps{15};
     std::uint32_t maxWidth{640};
     std::uint16_t slotCount{ipc::kDefaultSlotCount};
 };

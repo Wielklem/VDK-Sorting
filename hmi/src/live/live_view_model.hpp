@@ -1,8 +1,8 @@
 #pragma once
 
 #include <QAbstractListModel>
-#include <QElapsedTimer>
 #include <QTimer>
+#include <QVector>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -21,6 +21,8 @@ namespace vsort::hmi {
 // of every camera and pulls the newest frame on a render timer. Frames go to the VideoItems that
 // QML attached with attachVideo(). Freeze is a display-only state of the HMI: a frozen camera
 // is not read (its VideoItems keep the last picture), the service keeps streaming.
+// The frame rates (P30.86) come from the service: frames the camera delivered and frames analysed,
+// not the throttled preview. -1 = not known (no rates yet, or a camera without a sensor).
 class LiveViewModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
@@ -37,7 +39,8 @@ public:
         FrameCounterRole,
         FrameWidthRole,
         FrameHeightRole,
-        FpsRole
+        IncomingFpsRole,
+        AnalysedFpsRole
     };
 
     // `client` must outlive the model.
@@ -83,9 +86,8 @@ private:
         quint64 frameCounter{0};
         int frameWidth{0};
         int frameHeight{0};
-        double fps{0.0};
-        int fpsFrames{0};
-        QElapsedTimer fpsClock;
+        double incomingFps{-1.0};
+        double analysedFps{-1.0};
     };
     struct Sink {
         std::uint16_t cameraId{0};
@@ -98,6 +100,7 @@ private:
     void onCameraUpdated(const CameraInfo& camera);
     void onStreamChanged(quint16 cameraId, const QString& shmName);
     void onConnectedChanged(bool connected);
+    void onCameraRates(const QVector<CameraRateData>& rates);
     void updateAllFrozen();
     void deliver(std::uint16_t cameraId, const FramePtr& frame);
     static void attach(Entry& entry);
