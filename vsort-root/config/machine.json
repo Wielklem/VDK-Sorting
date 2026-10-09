@@ -21,7 +21,7 @@
                 ],
                 "name": "Camera 1",
                 "offset_cups": 0,
-                "roi_id": 0,
+                "roi_id": 1,
                 "show_in_monitor": true
               },
               {
@@ -36,7 +36,7 @@
                 ],
                 "name": "Camera 2",
                 "offset_cups": 0,
-                "roi_id": 0,
+                "roi_id": 1,
                 "show_in_monitor": true
               },
               {
@@ -51,7 +51,7 @@
                 ],
                 "name": "Camera 3",
                 "offset_cups": 0,
-                "roi_id": 0,
+                "roi_id": 1,
                 "show_in_monitor": true
               },
               {

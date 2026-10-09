@@ -14,7 +14,8 @@ Rectangle {
     required property bool hasFrame
     required property int frameWidth
     required property int frameHeight
-    required property real fps
+    required property real incomingFps // service: frames in; -1 = not known
+    required property real analysedFps // service: frames analysed without error; -1 = not known
 
     signal activated
     signal freezeToggled
@@ -74,7 +75,8 @@ Rectangle {
                 verticalCenter: parent.verticalCenter
             }
             variant: VsText.Caption
-            text: tile.hasFrame ? tile.frameWidth + "×" + tile.frameHeight + "  " + tile.fps.toFixed(1) + " fps" : ""
+            // Preview size (downscaled), then the camera's real rates (P30.86).
+            text: tile.hasFrame ? tile.frameWidth + "×" + tile.frameHeight + "  " + (tile.incomingFps < 0 ? "–" : tile.incomingFps.toFixed(1)) + " fps in, " + (tile.analysedFps < 0 ? "–" : tile.analysedFps.toFixed(1)) + " analysed" : ""
         }
     }
 

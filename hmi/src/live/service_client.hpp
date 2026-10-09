@@ -64,6 +64,7 @@ signals:
     void configReceived(const QString& module, const QByteArray& json, quint32 version);
     void cupSnapshotReceived(const QVector<vsort::hmi::LaneCupsData>& lanes);
     void cupUpdateReceived(const vsort::hmi::LaneCupsData& update);
+    void cameraRatesReceived(const QVector<vsort::hmi::CameraRateData>& rates);
 
 private:
     void poll();

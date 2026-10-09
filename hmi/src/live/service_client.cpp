@@ -319,6 +319,18 @@ void ServiceClient::handleMessage(std::span<const std::uint8_t> bytes) {
                                             .cups = toCups(event->cups())});
         break;
     }
+    case fb::Payload::CameraRatesEvent: {
+        QVector<CameraRateData> rates;
+        if (const auto* list = envelope.payload_as_CameraRatesEvent()->cameras(); list != nullptr) {
+            for (const auto* rate : *list) {
+                rates.push_back({.cameraId = rate->camera_id(),
+                                 .incomingFps = rate->incoming_fps(),
+                                 .analysedFps = rate->analysed_fps()});
+            }
+        }
+        emit cameraRatesReceived(rates);
+        break;
+    }
     default:
         break; // not needed by the live view
     }

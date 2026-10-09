@@ -8,7 +8,6 @@ namespace vsort::hmi {
 namespace {
 
 constexpr int kRenderIntervalMs = 33; // ~30 Hz poll of the rings; the service sets the real fps
-constexpr qint64 kFpsWindowMs = 1000;
 
 QString linkStateName(CameraLinkState state) {
     switch (state) {
@@ -36,6 +35,7 @@ LiveViewModel::LiveViewModel(ServiceClient& client, QObject* parent)
                 onStreamChanged(id, shm);
             });
     connect(&client_, &ServiceClient::connectedChanged, this, &LiveViewModel::onConnectedChanged);
+    connect(&client_, &ServiceClient::cameraRatesReceived, this, &LiveViewModel::onCameraRates);
 
     renderTimer_.setInterval(kRenderIntervalMs);
     connect(&renderTimer_, &QTimer::timeout, this, &LiveViewModel::renderTick);
@@ -74,23 +74,21 @@ QVariant LiveViewModel::data(const QModelIndex& index, int role) const {
         return entry.frameWidth;
     case FrameHeightRole:
         return entry.frameHeight;
-    case FpsRole:
-        return entry.fps;
+    case IncomingFpsRole:
+        return entry.incomingFps;
+    case AnalysedFpsRole:
+        return entry.analysedFps;
     default:
         return {};
     }
 }
 
 QHash<int, QByteArray> LiveViewModel::roleNames() const {
-    return {{CameraIdRole, "cameraId"},
-            {SerialRole, "serial"},
-            {LinkStateRole, "linkState"},
-            {FrozenRole, "frozen"},
-            {HasFrameRole, "hasFrame"},
-            {FrameCounterRole, "frameCounter"},
-            {FrameWidthRole, "frameWidth"},
-            {FrameHeightRole, "frameHeight"},
-            {FpsRole, "fps"}};
+    return {{CameraIdRole, "cameraId"},       {SerialRole, "serial"},
+            {LinkStateRole, "linkState"},     {FrozenRole, "frozen"},
+            {HasFrameRole, "hasFrame"},       {FrameCounterRole, "frameCounter"},
+            {FrameWidthRole, "frameWidth"},   {FrameHeightRole, "frameHeight"},
+            {IncomingFpsRole, "incomingFps"}, {AnalysedFpsRole, "analysedFps"}};
 }
 
 bool LiveViewModel::allFrozen() const noexcept {
@@ -126,8 +124,6 @@ void LiveViewModel::setFrozen(int cameraId, bool frozen) {
         frozenIds_.insert(id);
     } else {
         frozenIds_.erase(id);
-        entry.fpsClock.invalidate(); // restart the fps window after the pause
-        entry.fpsFrames = 0;
     }
     notifyRow(row, {FrozenRole});
     updateAllFrozen();
@@ -204,10 +200,30 @@ void LiveViewModel::onStreamChanged(quint16 cameraId, const QString& shmName) {
     attach(entry); // empty name: ring closed, detach (the last image stays on screen)
 }
 
+void LiveViewModel::onCameraRates(const QVector<CameraRateData>& rates) {
+    for (const CameraRateData& rate : rates) {
+        const int row = rowOf(rate.cameraId);
+        if (row < 0) {
+            continue;
+        }
+        Entry& entry = entries_[static_cast<std::size_t>(row)];
+        entry.incomingFps = rate.incomingFps;
+        entry.analysedFps = rate.analysedFps;
+        notifyRow(row, {IncomingFpsRole, AnalysedFpsRole});
+    }
+}
+
 void LiveViewModel::onConnectedChanged(bool isConnected) {
     emit connectedChanged();
+    if (!isConnected) {
+        for (Entry& entry : entries_) { // old rates would look live
+            entry.incomingFps = -1.0;
+            entry.analysedFps = -1.0;
+        }
+    }
     if (!entries_.empty()) {
-        emit dataChanged(index(0), index(rowCount() - 1), {LinkStateRole});
+        emit dataChanged(index(0), index(rowCount() - 1),
+                         {LinkStateRole, IncomingFpsRole, AnalysedFpsRole});
     }
     if (isConnected) { // first connect or service restart: state is always re-fetched
         client_.requestCameraList();
@@ -257,19 +273,8 @@ void LiveViewModel::renderTick() {
         latest_[entry.info.id] = shared;
         deliver(entry.info.id, shared);
         ++entry.frameCounter;
-
-        if (!entry.fpsClock.isValid()) {
-            entry.fpsClock.start();
-            entry.fpsFrames = 0;
-        }
-        ++entry.fpsFrames;
-        if (const qint64 elapsed = entry.fpsClock.elapsed(); elapsed >= kFpsWindowMs) {
-            entry.fps = entry.fpsFrames * 1000.0 / static_cast<double>(elapsed);
-            entry.fpsClock.restart();
-            entry.fpsFrames = 0;
-        }
         notifyRow(static_cast<int>(i),
-                  {HasFrameRole, FrameCounterRole, FrameWidthRole, FrameHeightRole, FpsRole});
+                  {HasFrameRole, FrameCounterRole, FrameWidthRole, FrameHeightRole});
     }
 }
 

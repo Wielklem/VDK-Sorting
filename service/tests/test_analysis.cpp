@@ -17,6 +17,7 @@
 
 #include "analysis/analysis_config.hpp"
 #include "analysis/analysis_module.hpp"
+#include "analysis/camera_rates.hpp"
 #include "analysis/pipeline.hpp"
 #include "analysis/result_join.hpp"
 #include "test_ipc_util.hpp"
@@ -362,4 +363,34 @@ TEST_F(AnalysisModuleTest, DisabledDoesNothing) {
     module.stop();
     EXPECT_EQ(module.framesAnalysed(), 0U);
     EXPECT_EQ(module.framesDropped(), 0U);
+}
+
+TEST_F(AnalysisModuleTest, PublishesIncomingAndAnalysedRatesPerCamera) {
+    AnalysisOptions options;
+    options.ratesInterval = 100ms;
+    AnalysisModule module{store.get(), options};
+    ModuleContext context{bus};
+    ASSERT_TRUE(module.init(context).has_value());
+    auto rates = bus.subscribe<CameraRates>();
+    ASSERT_TRUE(module.start().has_value());
+
+    for (std::uint64_t f = 1; f <= 5; ++f) {
+        module.submit(ellipseFrame(0, f, {{.centre = {320, 240}, .halfAxes = {90, 60}}})->frame);
+    }
+    double incoming = 0.0;
+    double analysed = 0.0;
+    for (int i = 0; i < 300 && analysed == 0.0; ++i) { // the frames may span two intervals
+        rates->drain([&](const CameraRates& r) {
+            ASSERT_EQ(r.cameras.size(), 4U); // the cameras with a sensor (default machine)
+            EXPECT_EQ(r.cameras[0].cameraId, 0);
+            EXPECT_EQ(r.cameras[1].incomingFps, 0.0); // camera 1 got no frames
+            incoming += r.cameras[0].incomingFps;
+            analysed += r.cameras[0].analysedFps;
+        });
+        std::this_thread::sleep_for(10ms);
+    }
+    module.stop();
+    EXPECT_GT(incoming, 0.0);
+    EXPECT_GT(analysed, 0.0);
+    EXPECT_LE(analysed, incoming);
 }

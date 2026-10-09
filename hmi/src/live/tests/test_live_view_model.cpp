@@ -163,6 +163,32 @@ TEST_F(LiveViewModelTest, FreezeAllAndUnfreezeAll) {
     EXPECT_TRUE(spinUntil([&] { return counter(0) > c0 && counter(1) > c1; }, [this] { step(); }));
 }
 
+TEST_F(LiveViewModelTest, RatesComeFromTheServiceNotFromThePreview) {
+    ASSERT_TRUE(waitForFrames());
+    const auto incoming = [&](int row) {
+        return model.data(model.index(row), LiveViewModel::IncomingFpsRole).toDouble();
+    };
+    const auto analysed = [&](int row) {
+        return model.data(model.index(row), LiveViewModel::AnalysedFpsRole).toDouble();
+    };
+    EXPECT_EQ(incoming(0), -1.0); // frames are shown, but no rates arrived yet
+    EXPECT_EQ(analysed(0), -1.0);
+
+    EXPECT_TRUE(spinUntil([&] { return incoming(1) > 0.0; },
+                          [this] {
+                              step();
+                              service.publishCameraRates(kCam2, 10.0F, 9.5F);
+                              service.publishCameraRates(999, 1.0F, 1.0F); // unknown: ignored
+                          }));
+    EXPECT_DOUBLE_EQ(incoming(1), 10.0);
+    EXPECT_DOUBLE_EQ(analysed(1), 9.5);
+    EXPECT_EQ(incoming(0), -1.0); // other camera untouched
+
+    service.setHeartbeats(false); // offline: the old rates are not shown as live
+    EXPECT_TRUE(spinUntil([&] { return !model.connected(); }, [this] { service.pump(); }, 6s));
+    EXPECT_EQ(incoming(1), -1.0);
+}
+
 TEST_F(LiveViewModelTest, UnknownCameraIsIgnored) {
     ASSERT_TRUE(waitForFrames());
     model.setFrozen(999, true);

@@ -209,6 +209,22 @@ void FakeService::publishCameraListChanged() {
     (void)pub_.send(zmq::buffer(bytes), zmq::send_flags::none);
 }
 
+void FakeService::publishCameraRates(std::uint16_t cameraId, float incomingFps, float analysedFps) {
+    flatbuffers::FlatBufferBuilder fbb{128};
+    const std::vector<flatbuffers::Offset<fb::CameraRate>> rates{
+        fb::CreateCameraRate(fbb, cameraId, incomingFps, analysedFps)};
+    const auto event = fb::CreateCameraRatesEvent(fbb, fbb.CreateVector(rates));
+    const auto bytes = ipc::finishEnvelope(fbb,
+                                           {.type = fb::MsgType::CameraRates,
+                                            .requestId = 0,
+                                            .timestampNs = 0,
+                                            .status = 0,
+                                            .errorText = {}},
+                                           fb::Payload::CameraRatesEvent, event.Union());
+    (void)pub_.send(zmq::buffer(ipc::kTopicCamera), zmq::send_flags::sndmore);
+    (void)pub_.send(zmq::buffer(bytes), zmq::send_flags::none);
+}
+
 void FakeService::publishHeartbeat() {
     flatbuffers::FlatBufferBuilder fbb{128};
     const auto event =
