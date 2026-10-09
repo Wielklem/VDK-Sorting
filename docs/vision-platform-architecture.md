@@ -286,7 +286,7 @@ tracking → ObjectRecord (bus) → module "cups": CupTable, ≤ 10 Hz → CupUp
 HMI connects → GetCupSnapshot → CupMonitor::snapshot()
 ```
 
-- **Rows.** Per lane the last 50 cups by lane cup ID, continuous: missing IDs are created as rows. Records older than the window are ignored.
+- **Rows.** Per lane the last 150 cups by lane cup ID, continuous: missing IDs are created as rows. Records older than the window are ignored.
 - **Cells.** One per sensor of the lane, upstream first: Pending (not reached yet), Ok, NoData. A later record for the same lane, cup and sensor replaces the earlier one (P40.40 corrections).
 - **Passed without photo.** Cup c is due at sensor s when the newest cup ID passes c + (offset_s − smallest offset); still Pending 3 cups after that → NoData. Covers a silent camera and lost records. Nothing changes while the machine stands still.
 - **Updates.** At most 10 per second per lane; only changed cups, full state per cup, newest first; seq + 1 per update.
@@ -307,7 +307,7 @@ Page plugin `hmi/pages/product_monitor` (pageId G140, order 140); model `Product
 - **Lanes and columns.** From the `machine` config (GetConfig on connect): lane dropdown; per sensor with `show_in_monitor` a photo column (sensor name) and one column per measurement ("label [unit]"). The first column is the lane cup ID.
 - **Cells.** Photo: "photo OK" (green), red "no data", empty while the cup has not reached the sensor. Measurements (P60.15): the value in the catalog `format` (`number` 1 decimal, `integer`, `presence` = "present"/"empty"); "–" while there is no value (no photo, no data, not measured yet).
 - **Rows.** Compact (`Theme.tableRowHeight`, 28 px), so more cups fit on the screen. A cup with product (presence column "present") gets a lighter row (`Theme.rowFilled`); empty and not yet measured cups keep the dark rows.
-- **Rows.** Newest cup on top, up to the depth the service reports (50). Updated in place (insert at the top, remove at the bottom), so the view keeps its delegates.
+- **Rows.** Newest cup on top, up to the depth the service reports (150). The list does not scroll itself: a scroll bar on the right (and the mouse wheel) picks the first row, and the model gives exactly the rows that fit, updated by index, so the view never shifts. Live, the cups move through that window; Freeze holds them.
 - **Sync.** On connect: GetConfig("machine") and GetCupSnapshot(all lanes). Updates with seq ≤ the lane's seq are dropped; before the first snapshot or after a gap in seq a new snapshot is requested (one in flight, retried after 1 s).
 - **Freeze.** Bottom-right button Freeze / Back to live. Frozen: the table holds still while data keeps arriving; back to live shows the current state. Choosing another lane goes back to live.
 - **States.** "Service offline", "Loading the machine config…", "Machine config invalid: …", "No lanes in the machine config" and "No cups yet" replace the table.
@@ -317,7 +317,7 @@ V1 shortcuts (compared to the final implementation):
 - **Read on connect.** The machine config is read when the HMI connects; after editing it, restart the service (the HMI reconnects and reads it again).
 - **Display only.** No row selection, cup details, photos or export; no column order or width settings.
 - **Freeze per lane.** Switching lanes leaves the frozen view.
-- **No history.** Only the last 50 cups the service keeps; nothing from before a service restart.
+- **No history.** Only the last 150 cups the service keeps; nothing from before a service restart.
 
 ### 40.60 Analysis (M60, P60.10)
 

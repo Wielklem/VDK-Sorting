@@ -124,6 +124,8 @@ TEST_F(ProductMonitorGuiTest, ShowsColumnsRowsAndRedNoDataCells) {
     start(kMachine);
     ASSERT_TRUE(loadPage());
     ASSERT_TRUE(spinUntil([&] { return model.rowsModel().rowCount() == 2; }, [this] { step(); }));
+    // The list creates its delegates on a later polish: wait for the cells, not only the model.
+    ASSERT_TRUE(spinUntil([&] { return all("okCell").size() == 2; }, [this] { step(); }));
     settle();
 
     EXPECT_EQ(all("columnHeader").size(), 4); // Camera 1, Size [mm], Potatoes, Camera 2

@@ -47,6 +47,9 @@ public:
 
     // `rows`: newest first, consecutive cup IDs.
     void update(const QVector<Row>& rows);
+    // Plain update by index for a fixed window: changed rows emit dataChanged, the row count only
+    // changes at the end. Nothing is inserted at the top, so a view never shifts its content.
+    void assign(const QVector<Row>& rows);
     [[nodiscard]] const QVector<Row>& rows() const noexcept { return rows_; }
 
 private:
@@ -67,6 +70,10 @@ class ProductMonitorModel : public QObject {
     Q_PROPERTY(int laneIndex READ laneIndex WRITE setLaneIndex NOTIFY laneIndexChanged)
     Q_PROPERTY(QVariantList columns READ columns NOTIFY columnsChanged)
     Q_PROPERTY(QObject* rows READ rows CONSTANT)
+    Q_PROPERTY(QObject* windowRows READ windowRows CONSTANT)
+    Q_PROPERTY(int rowCount READ rowCount NOTIFY rowCountChanged)
+    Q_PROPERTY(int firstRow READ firstRow WRITE setFirstRow NOTIFY firstRowChanged)
+    Q_PROPERTY(int windowSize READ windowSize WRITE setWindowSize NOTIFY windowSizeChanged)
     Q_PROPERTY(bool frozen READ frozen WRITE setFrozen NOTIFY frozenChanged)
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
@@ -88,6 +95,14 @@ public:
     [[nodiscard]] QVariantList columns() const;
     [[nodiscard]] QObject* rows() noexcept { return &rows_; }
     [[nodiscard]] const CupRowsModel& rowsModel() const noexcept { return rows_; }
+    // What the page shows: rows firstRow .. firstRow + windowSize - 1 of `rows`, by index.
+    [[nodiscard]] QObject* windowRows() noexcept { return &window_; }
+    [[nodiscard]] const CupRowsModel& windowModel() const noexcept { return window_; }
+    [[nodiscard]] int rowCount() const noexcept { return rowCount_; }
+    [[nodiscard]] int firstRow() const noexcept { return firstRow_; }
+    void setFirstRow(int row); // clamped to 0 .. rowCount - windowSize
+    [[nodiscard]] int windowSize() const noexcept { return windowSize_; }
+    void setWindowSize(int size); // at least 1
     [[nodiscard]] bool frozen() const noexcept { return frozen_; }
     void setFrozen(bool frozen);
     [[nodiscard]] bool connected() const noexcept { return connected_; }
@@ -103,6 +118,9 @@ signals:
     void frozenChanged();
     void connectedChanged();
     void statusChanged();
+    void rowCountChanged();
+    void firstRowChanged();
+    void windowSizeChanged();
 
 private:
     struct Column {
@@ -119,7 +137,7 @@ private:
     struct LaneStore {
         bool synced{false};
         std::uint64_t seq{0};
-        std::size_t depth{50};
+        std::size_t depth{150};
         std::map<std::int64_t, CupRowData> cups;
     };
 
@@ -130,14 +148,19 @@ private:
     static void apply(LaneStore& store, const QVector<CupRowData>& cups);
     void requestSnapshot(bool throttled);
     void refresh();
+    void updateWindow();
     void updateStatus();
     [[nodiscard]] const LaneLayout* currentLane() const;
 
     ServiceClient& client_;
     CupRowsModel rows_;
+    CupRowsModel window_;
     std::vector<LaneLayout> layout_;
     std::map<std::uint16_t, LaneStore> stores_;
     int laneIndex_{0};
+    int firstRow_{0};
+    int windowSize_{40};
+    int rowCount_{0};
     bool frozen_{false};
     bool connected_{false};
     bool configLoaded_{false};
