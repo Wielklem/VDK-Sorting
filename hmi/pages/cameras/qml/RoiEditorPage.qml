@@ -72,10 +72,11 @@ Rectangle {
             variant: VsText.Title
         }
 
-        CameraPicker {
+        VsCameraPicker {
             id: picker
 
             live: page.live
+            showFreeze: true
             anchors {
                 left: title.right
                 leftMargin: Theme.padding

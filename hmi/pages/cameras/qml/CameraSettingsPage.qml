@@ -41,7 +41,7 @@ Rectangle {
             variant: VsText.Title
         }
 
-        CameraPicker {
+        VsCameraPicker {
             id: picker
 
             live: page.live

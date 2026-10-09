@@ -2,8 +2,8 @@ import QtQuick
 import VsortHmi
 
 // G60 Analytics: tabs (only G60.20 Parameters so far, P60.45; P60.90 adds the stage list and the
-// debug overlays). `liveView` and `analysisTuning` are the models that main.cpp puts into the QML
-// context.
+// debug overlays). `liveView`, `analysisTuning` and `roiOverlay` are the models that main.cpp puts
+// into the QML context.
 Item {
     id: root
 
@@ -43,5 +43,6 @@ Item {
         }
         live: liveView
         tuning: analysisTuning
+        rois: roiOverlay
     }
 }
