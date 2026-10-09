@@ -35,7 +35,7 @@
                   {"key": "length_mm", "label": "Length",   "unit": "mm"}
                 ],
                 "name": "Bovenaan diabolos",
-                "offset_cups": 0,
+                "offset_cups": 28,
                 "roi_id": 1,
                 "show_in_monitor": true
               },
@@ -50,7 +50,7 @@
                   {"key": "length_mm", "label": "Length",   "unit": "mm"}
                 ],
                 "name": "Na camerakast",
-                "offset_cups": 0,
+                "offset_cups": 49,
                 "roi_id": 1,
                 "show_in_monitor": true
               },
@@ -65,7 +65,7 @@
                   {"key": "length_mm", "label": "Length",   "unit": "mm"}
                 ],
                 "name": "CaExitframe",
-                "offset_cups": 0,
+                "offset_cups": 60,
                 "roi_id": 0,
                 "show_in_monitor": true
               }

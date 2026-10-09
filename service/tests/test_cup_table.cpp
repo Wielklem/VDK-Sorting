@@ -63,7 +63,7 @@ TEST(CupTable, RecordsFillTheCells) {
     const auto snap = t.snapshot(std::nullopt);
     ASSERT_EQ(snap.size(), 1U);
     EXPECT_EQ(snap[0].laneId, 1);
-    EXPECT_EQ(snap[0].depth, 50);
+    EXPECT_EQ(snap[0].depth, 250);
     ASSERT_EQ(snap[0].cups.size(), 2U);
     EXPECT_EQ(snap[0].cups[0].cupId, 1); // newest first
     ASSERT_EQ(snap[0].cups[0].cells.size(), 4U);
@@ -83,7 +83,7 @@ TEST(CupTable, LaterRecordReplacesEarlierOne) {
 }
 
 TEST(CupTable, KeepsTheLastFiftyCupsWithoutGaps) {
-    CupTable t{machine()};
+    CupTable t{machine(), CupTableOptions{.depth = 50, .passMargin = 3}};
     for (std::int64_t id = 0; id < 60; ++id) {
         t.apply(rec(id, 1));
     }

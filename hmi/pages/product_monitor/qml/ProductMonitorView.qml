@@ -16,6 +16,21 @@ Rectangle {
     readonly property int cellHeight: Theme.tableRowHeight
     readonly property real cellWidth: Math.max(90, (list.width - page.cupColumnWidth) / Math.max(1, page.monitor.columns.length))
     readonly property bool ready: page.monitor.status === ""
+    readonly property int scrollBarWidth: 14
+    // Whole rows that fit in the list; the model gives exactly these rows (from firstRow).
+    readonly property int visibleRows: Math.max(1, Math.floor(list.height / page.cellHeight))
+
+    Binding {
+        target: page.monitor
+        property: "windowSize"
+        value: page.visibleRows
+    }
+
+    // Wheel anywhere on the page: 3 rows per notch.
+    WheelHandler {
+        target: null
+        onWheel: event => page.monitor.firstRow = page.monitor.firstRow - Math.round(event.angleDelta.y / 40)
+    }
 
     component HeaderCell: Rectangle {
         id: headerCell
@@ -92,6 +107,14 @@ Rectangle {
                 enabled: page.ready
                 onActivated: index => page.monitor.laneIndex = index
             }
+
+            VsText {
+                objectName: "rangeText"
+                anchors.verticalCenter: parent.verticalCenter
+                visible: page.ready && page.monitor.rowCount > 0
+                color: Theme.textSecondary
+                text: "Rows %1–%2 of %3".arg(page.monitor.firstRow + 1).arg(Math.min(page.monitor.firstRow + page.visibleRows, page.monitor.rowCount)).arg(page.monitor.rowCount)
+            }
         }
 
         VsText {
@@ -116,7 +139,7 @@ Rectangle {
             top: bar.bottom
             topMargin: Theme.spacing
             leftMargin: Theme.padding
-            rightMargin: Theme.padding
+            rightMargin: Theme.padding + page.scrollBarWidth + Theme.spacing
         }
         height: page.cellHeight
         visible: page.ready
@@ -150,9 +173,11 @@ Rectangle {
             bottomMargin: Theme.spacing
         }
         clip: true
-        boundsBehavior: Flickable.StopAtBounds
+        // No flicking: the scroll bar or the wheel picks the rows and the model gives exactly
+        // those, so new cups only change cells and the view never moves.
+        interactive: false
         visible: page.ready
-        model: page.monitor.rows
+        model: page.monitor.windowRows
 
         delegate: Row {
             id: rowItem
@@ -162,11 +187,20 @@ Rectangle {
             required property var cells
             required property var values
 
-            // Cup with product (presence column "present"): lighter row. Empty or not measured: dark.
-            readonly property bool filled: rowItem.cells.indexOf("present") >= 0
-            readonly property color rowColor: rowItem.filled
-                ? (rowItem.index % 2 === 0 ? Theme.rowFilled : Qt.lighter(Theme.rowFilled, 1.1))
-                : (rowItem.index % 2 === 0 ? Theme.surface : Theme.surfaceRaised)
+            // Sensors whose presence column says "present". Only their cells get the lighter colour;
+            // the cup column and the other sensors' cells stay dark.
+            readonly property var filledSensors: {
+                const ids = [];
+                const columns = page.monitor.columns;
+                for (let i = 0; i < rowItem.cells.length && i < columns.length; ++i) {
+                    if (rowItem.cells[i] === "present") {
+                        ids.push(columns[i].sensorId);
+                    }
+                }
+                return ids;
+            }
+            readonly property color rowColor: rowItem.index % 2 === 0 ? Theme.surface : Theme.surfaceRaised
+            readonly property color filledColor: rowItem.index % 2 === 0 ? Theme.rowFilled : Qt.lighter(Theme.rowFilled, 1.1)
 
             height: page.cellHeight
 
@@ -195,11 +229,13 @@ Rectangle {
                     required property int index
                     required property string modelData
                     readonly property bool measured: cell.modelData === "value" || cell.modelData === "present" || cell.modelData === "absent"
+                    readonly property var column: page.monitor.columns[cell.index]
+                    readonly property bool filled: cell.column !== undefined && rowItem.filledSensors.indexOf(cell.column.sensorId) >= 0
 
                     objectName: cell.modelData === "nodata" ? "noDataCell" : (cell.modelData === "ok" ? "okCell" : (cell.measured ? "valueCell" : "cell"))
                     width: page.cellWidth
                     height: page.cellHeight
-                    color: cell.modelData === "nodata" ? Theme.error : rowItem.rowColor
+                    color: cell.modelData === "nodata" ? Theme.error : (cell.filled ? rowItem.filledColor : rowItem.rowColor)
                     border.width: Theme.borderWidth
                     border.color: Theme.background
 
@@ -241,6 +277,39 @@ Rectangle {
                     }
                 }
             }
+        }
+    }
+
+    // Picks which rows the list shows; the handle size is the visible part of all rows.
+    ScrollBar {
+        id: rowBar
+
+        readonly property int total: page.monitor.rowCount
+
+        objectName: "rowBar"
+        anchors {
+            top: list.top
+            bottom: list.bottom
+            right: parent.right
+            rightMargin: Theme.padding
+        }
+        width: page.scrollBarWidth
+        visible: page.ready
+        orientation: Qt.Vertical
+        policy: ScrollBar.AlwaysOn
+        size: rowBar.total > 0 ? Math.min(1, page.visibleRows / rowBar.total) : 1
+        position: rowBar.total > 0 ? page.monitor.firstRow / rowBar.total : 0
+        stepSize: rowBar.total > 0 ? 1 / rowBar.total : 0
+        onPositionChanged: if (rowBar.pressed)
+            page.monitor.firstRow = Math.round(rowBar.position * rowBar.total)
+
+        contentItem: Rectangle {
+            implicitWidth: page.scrollBarWidth
+            radius: page.scrollBarWidth / 2
+            color: rowBar.pressed ? Theme.accent : Theme.textSecondary
+        }
+        background: Rectangle {
+            color: Theme.surface
         }
     }
 

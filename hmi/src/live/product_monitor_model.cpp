@@ -153,6 +153,28 @@ void CupRowsModel::update(const QVector<Row>& rows) {
     }
 }
 
+void CupRowsModel::assign(const QVector<Row>& rows) {
+    const auto now = rows.size();
+    if (const auto old = rows_.size(); now < old) {
+        beginRemoveRows({}, static_cast<int>(now), static_cast<int>(old) - 1);
+        rows_.resize(now);
+        endRemoveRows();
+    }
+    const auto common = rows_.size();
+    for (qsizetype i = 0; i < common; ++i) {
+        if (rows_[i] != rows[i]) {
+            rows_[i] = rows[i];
+            const QModelIndex at = index(static_cast<int>(i));
+            emit dataChanged(at, at, {CupIdRole, CellsRole, ValuesRole});
+        }
+    }
+    if (now > common) {
+        beginInsertRows({}, static_cast<int>(common), static_cast<int>(now) - 1);
+        rows_ += rows.mid(common);
+        endInsertRows();
+    }
+}
+
 // ---- ProductMonitorModel ----
 
 ProductMonitorModel::ProductMonitorModel(ServiceClient& client, QObject* parent)
@@ -363,6 +385,38 @@ void ProductMonitorModel::refresh() {
         }
     }
     rows_.update(rows);
+    updateWindow();
+}
+
+void ProductMonitorModel::setFirstRow(int row) {
+    if (const int first = std::max(0, row); first != firstRow_) {
+        firstRow_ = first;
+        emit firstRowChanged();
+    }
+    updateWindow(); // clamps at the bottom
+}
+
+void ProductMonitorModel::setWindowSize(int size) {
+    if (const int rows = std::max(1, size); rows != windowSize_) {
+        windowSize_ = rows;
+        emit windowSizeChanged();
+    }
+    updateWindow();
+}
+
+void ProductMonitorModel::updateWindow() {
+    const auto& all = rows_.rows();
+    const int count = static_cast<int>(all.size());
+    if (const int first = std::min(firstRow_, std::max(0, count - windowSize_));
+        first != firstRow_) {
+        firstRow_ = first;
+        emit firstRowChanged();
+    }
+    window_.assign(all.mid(firstRow_, windowSize_));
+    if (count != rowCount_) {
+        rowCount_ = count;
+        emit rowCountChanged();
+    }
 }
 
 void ProductMonitorModel::updateStatus() {

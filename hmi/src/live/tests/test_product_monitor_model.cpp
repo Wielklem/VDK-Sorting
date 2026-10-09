@@ -183,6 +183,45 @@ TEST(CupRowsModel, InPlaceUpdatesKeepRows) {
     EXPECT_EQ(rows.rowCount(), 1);
 }
 
+TEST(CupRowsModel, AssignChangesRowsByIndex) {
+    CupRowsModel rows;
+    rows.assign({{.cupId = 5, .cells = {"ok"}}, {.cupId = 4, .cells = {"ok"}}});
+    int inserted = 0;
+    int removed = 0;
+    int changed = 0;
+    QObject::connect(&rows, &QAbstractItemModel::rowsInserted, [&] { ++inserted; });
+    QObject::connect(&rows, &QAbstractItemModel::rowsRemoved, [&] { ++removed; });
+    QObject::connect(&rows, &QAbstractItemModel::dataChanged, [&] { ++changed; });
+
+    rows.assign({{.cupId = 6, .cells = {"ok"}}, {.cupId = 5, .cells = {"ok"}}}); // one cup on
+    EXPECT_EQ(inserted, 0);
+    EXPECT_EQ(removed, 0);
+    EXPECT_EQ(changed, 2);
+    EXPECT_EQ(rows.rows()[0].cupId, 6);
+
+    rows.assign({{.cupId = 6, .cells = {"ok"}}});
+    EXPECT_EQ(removed, 1);
+    EXPECT_EQ(rows.rowCount(), 1);
+}
+
+TEST_F(ProductMonitorModelTest, WindowShowsAPartOfTheRows) {
+    sendUpdate(6, {cup(13, CupCellStatus::Ok, CupCellStatus::Pending),
+                   cup(12, CupCellStatus::Ok, CupCellStatus::Pending)});
+    model.setWindowSize(2);
+    model.setFirstRow(1);
+    EXPECT_EQ(model.rowCount(), 4);
+    ASSERT_EQ(model.windowModel().rowCount(), 2);
+    EXPECT_EQ(model.windowModel().rows()[0].cupId, 12);
+
+    model.setFirstRow(9); // clamped: the last two rows
+    EXPECT_EQ(model.firstRow(), 2);
+    EXPECT_EQ(model.windowModel().rows()[0].cupId, 11);
+
+    sendUpdate(7, {cup(14, CupCellStatus::Ok, CupCellStatus::Pending)});
+    EXPECT_EQ(model.firstRow(), 2); // the window stays, the cups move one row down
+    EXPECT_EQ(model.windowModel().rows()[0].cupId, 12);
+}
+
 TEST_F(ProductMonitorModelTest, MeasurementsShowInTheirColumns) {
     auto measured = cup(12, CupCellStatus::Ok, CupCellStatus::Pending);
     measured.cells[0].measurements = {{.key = QStringLiteral("size_mm"), .value = 41.27},
