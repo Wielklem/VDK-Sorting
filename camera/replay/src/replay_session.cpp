@@ -29,6 +29,7 @@ Result<std::vector<SessionCamera>> listSessionCameras(const std::filesystem::pat
             camera.serial = entry.value("serial", std::string{});
             camera.model = entry.value("model", std::string{});
             camera.index = entry.at("index").get<std::uint16_t>();
+            camera.file = entry.value("file", std::string{});
             if (camera.serial.empty()) {
                 return makeError(Errc::ParseError, "session.json: camera without serial");
             }

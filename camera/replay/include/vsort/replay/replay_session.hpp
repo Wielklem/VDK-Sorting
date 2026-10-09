@@ -14,6 +14,7 @@ struct SessionCamera {
     std::string serial;
     std::string model;
     std::uint16_t index{0}; // logical camera ID at recording time
+    std::string file;       // recording file name (camNN.vrec), next to session.json
 };
 
 // Reads <sessionDir>/session.json. Sorted by index.
