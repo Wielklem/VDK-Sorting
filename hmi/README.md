@@ -6,10 +6,11 @@ Qt 6 / QML operator interface (M100, pages G20–G130). Separate process; talks 
 - `VsText` (variants: Body, Caption, Title, Heading), `VsButton` (`primary`), `VsNumberInput` (`from`, `to`, `decimals`, `unit`, `edited`), `VsTable` (`headers`, `model` with `display` role, `currentRow`), `VsDialog`.
 - All components build on `QtQuick.Controls.Basic` so they look the same on every OS.
 - Gallery: `vsort_hmi --gallery`. Headless check: `vsort_hmi --selftest` (runs in ctest on Linux).
+- Navigation: `NavBar` across the top, one button per page plugin (sorted by `order()`); a page's own tabs sit in a column on the left (`Theme.sideNavWidth`).
 
 ## Overlay layer (P30.70)
 - `OverlayLayer` (in `VsortHmi`): draws ROIs, lane lines and detections over a `VideoItem`. Coordinates are camera-frame pixels; bind `sourceSize` to the video's `sourceSize`.
-- Used by page G35 Calibrate. Data (`rois`, `lanes`, `detections`) comes with P30.80 and P40; until then use the "Demo data" button.
+- Used by the G30.20 ROI editor; later by G50.30 lane ROIs and G60.30 debug overlays. No separate page.
 
 ## ROI editor and camera settings (P30.80)
 - G30 Cameras has tabs: Live view (G30.10), ROI (G30.20), Camera settings (G30.30).

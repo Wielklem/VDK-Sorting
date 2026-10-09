@@ -29,6 +29,11 @@ QtObject {
     readonly property int padding: 16
     readonly property int radius: 6
     readonly property int controlHeight: 44
+    readonly property int sideNavWidth: 200 // in-page tab column (left)
+    readonly property int headerHeight: 56 // app header with page tabs
+    readonly property int indicatorWidth: 3 // accent bar of the selected tab
+    readonly property color accentSoft: "#262f81f7" // accent at 15 %: selected side tab
+    readonly property color hover: "#14ffffff" // white at 8 %: hover on flat items
     readonly property int tableRowHeight: 28 // dense data tables (Product Monitor)
     readonly property color rowFilled: "#4B5563" // Product Monitor: cup with product
     readonly property int borderWidth: 1
