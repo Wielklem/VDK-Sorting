@@ -130,7 +130,9 @@ Result<> ColorSegmentationStage::process(AnalysisContext& ctx) const {
     }
     const auto& p = params_;
     cv::Mat hsv;
-    cv::cvtColor(ctx.bgr, hsv, cv::COLOR_BGR2HSV);
+    cv::Mat smoothed;
+    cv::GaussianBlur(ctx.bgr, smoothed, cv::Size{5, 5}, 0.0); // less pixel noise at the edge
+    cv::cvtColor(smoothed, hsv, cv::COLOR_BGR2HSV);
     cv::inRange(hsv, cv::Scalar{p.hsvLower[0] * 1.0, p.hsvLower[1] * 1.0, p.hsvLower[2] * 1.0},
                 cv::Scalar{p.hsvUpper[0] * 1.0, p.hsvUpper[1] * 1.0, p.hsvUpper[2] * 1.0},
                 ctx.mask);
@@ -145,6 +147,14 @@ Result<> ColorSegmentationStage::process(AnalysisContext& ctx) const {
             cv::dilate(ctx.mask, ctx.mask, kernel, cv::Point{-1, -1},
                        static_cast<int>(p.dilateIterations));
         }
+    }
+
+    // Round off the per-pixel boundary: blur, then re-threshold (port of eqraftvision _smooth_mask).
+    // Trims spurs and fills notches symmetrically; opening alone only trims spurs.
+    constexpr double kEdgeSmoothSigmaPx = 4.0;
+    if (kEdgeSmoothSigmaPx > 0.0) {
+        cv::GaussianBlur(ctx.mask, ctx.mask, cv::Size{}, kEdgeSmoothSigmaPx);
+        cv::threshold(ctx.mask, ctx.mask, 127.0, 255.0, cv::THRESH_BINARY);
     }
 
     const cv::Rect roi = ctx.roi & cv::Rect{0, 0, ctx.mask.cols, ctx.mask.rows};
