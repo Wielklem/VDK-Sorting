@@ -16,7 +16,7 @@
 namespace vsort::service {
 
 struct CupTableOptions {
-    std::size_t depth{150};      // cups kept per lane
+    std::size_t depth{250};      // cups kept per lane
     std::uint32_t passMargin{3}; // a pending cell becomes NoData this many cups after it is due
 };
 

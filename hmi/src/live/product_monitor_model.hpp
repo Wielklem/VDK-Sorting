@@ -137,7 +137,7 @@ private:
     struct LaneStore {
         bool synced{false};
         std::uint64_t seq{0};
-        std::size_t depth{150};
+        std::size_t depth{250};
         std::map<std::int64_t, CupRowData> cups;
     };
 
