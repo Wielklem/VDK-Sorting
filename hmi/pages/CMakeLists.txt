@@ -1,3 +1,2 @@
 add_subdirectory(cameras)
-add_subdirectory(calibrate)
 add_subdirectory(product_monitor)

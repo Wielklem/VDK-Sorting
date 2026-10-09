@@ -2,7 +2,7 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Quick QuickControls2)
 qt_standard_project_setup(REQUIRES 6.5)
 
 # Put all QML files in the module root, next to the qmldir (needed for the Theme singleton).
-set(VSORT_QML_NAMES Main Gallery Theme NavBar VsText VsButton VsNumberInput VsTable VsDialog OverlayLayer)
+set(VSORT_QML_NAMES Main Gallery Theme NavBar VsText VsButton VsNumberInput VsTable VsDialog OverlayLayer VsSideTab)
 foreach(name IN LISTS VSORT_QML_NAMES)
   set_source_files_properties(qml/${name}.qml PROPERTIES QT_RESOURCE_ALIAS ${name}.qml)
 endforeach()
@@ -40,7 +40,8 @@ qt_add_qml_module(vsort_hmi
     qml/VsNumberInput.qml
     qml/VsTable.qml
     qml/VsDialog.qml
-    qml/OverlayLayer.qml)
+    qml/OverlayLayer.qml
+    qml/VsSideTab.qml)
 
 target_sources(vsort_hmi PRIVATE ${VSORT_HMI_VIDEO_ITEM_SOURCES})
 target_link_libraries(vsort_hmi PRIVATE Qt6::Quick Qt6::QuickControls2 vsort::common

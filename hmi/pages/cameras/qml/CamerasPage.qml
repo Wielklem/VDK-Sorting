@@ -1,58 +1,75 @@
 import QtQuick
 import VsortHmi
 
-// G30 Cameras: tabs G30.10 Live view, G30.20 ROI, G30.30 Camera settings.
+// G30 Cameras: tabs G30.10 Live view, G30.20 ROI, G30.30 Camera settings, as side navigation on the left.
 // `liveView`, `roiEditor` and `cameraSettings` are the models that main.cpp puts into the QML context.
 Item {
     id: root
 
     property int tab: 0
+    readonly property var tabNames: ["Live view", "ROI", "Camera settings"]
+    readonly property var tabObjectNames: ["tabLive", "tabRoi", "tabSettings"]
 
     Rectangle {
         id: tabs
 
         anchors {
             left: parent.left
-            right: parent.right
             top: parent.top
+            bottom: parent.bottom
         }
-        height: Theme.controlHeight + 2 * Theme.spacing
-        color: Theme.surfaceRaised
+        width: Theme.sideNavWidth
+        color: Theme.surface
 
-        Row {
+        Column {
             anchors {
                 left: parent.left
-                leftMargin: Theme.padding
-                verticalCenter: parent.verticalCenter
+                right: parent.right
+                top: parent.top
+                margins: Theme.spacing
+                topMargin: Theme.padding
             }
-            spacing: Theme.spacing
+            spacing: Theme.spacing / 2
 
-            VsButton {
-                objectName: "tabLive"
-                text: "Live view"
-                primary: root.tab === 0
-                onClicked: root.tab = 0
+            VsText {
+                leftPadding: Theme.padding
+                bottomPadding: Theme.spacing
+                text: "CAMERAS"
+                variant: VsText.Caption
+                font.letterSpacing: 1.5
             }
-            VsButton {
-                objectName: "tabRoi"
-                text: "ROI"
-                primary: root.tab === 1
-                onClicked: root.tab = 1
+
+            Repeater {
+                model: root.tabNames
+                delegate: VsSideTab {
+                    required property int index
+                    required property string modelData
+
+                    width: parent.width
+                    objectName: root.tabObjectNames[index]
+                    text: modelData
+                    selected: root.tab === index
+                    onClicked: root.tab = index
+                }
             }
-            VsButton {
-                objectName: "tabSettings"
-                text: "Camera settings"
-                primary: root.tab === 2
-                onClicked: root.tab = 2
+        }
+
+        Rectangle {
+            anchors {
+                right: parent.right
+                top: parent.top
+                bottom: parent.bottom
             }
+            width: Theme.borderWidth
+            color: Theme.border
         }
     }
 
     Loader {
         anchors {
-            left: parent.left
+            left: tabs.right
             right: parent.right
-            top: tabs.bottom
+            top: parent.top
             bottom: parent.bottom
         }
         sourceComponent: root.tab === 0 ? liveTab : (root.tab === 1 ? roiTab : settingsTab)

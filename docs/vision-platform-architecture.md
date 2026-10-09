@@ -520,7 +520,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P60.20** Store the pipeline definition in the recipe: ordered stages plus parameters.
 - **P60.30 [PARTIALLY_DONE]** Build the preprocessing stage: colour conversion (done), illumination normalisation.
 - **P60.40 [PARTIALLY_DONE]** Build the segmentation stage: object mask per lane ROI (eqraftvision cups mode, HSV range).
-- **P60.45** HSV sliders with live mask preview on the calibrate page; the service reloads `analysis` on ConfigChanged without a restart.
+- **P60.45** HSV sliders with live mask preview in G60.20 Parameters (first part of the G60 page; P60.90 completes it); the service reloads `analysis` on ConfigChanged without a restart.
 - **P60.50** Build G30.40 calibration: px→mm from a calibration target, scale per camera.
 - **P60.60 [PARTIALLY_DONE]** Build the size stage: area, major/minor axis in mm (mm/px via the `roi_width_mm` quick fix until P60.50).
 - **P60.70** Build the dirt % stage: dirt pixel ratio on the shell mask.

@@ -27,7 +27,7 @@ Rectangle {
             top: parent.top
         }
         height: Theme.controlHeight + 2 * Theme.spacing
-        color: Theme.surface
+        color: Theme.background
 
         VsText {
             id: title
