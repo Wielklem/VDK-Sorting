@@ -197,6 +197,7 @@ Rules:
 - **Saved settings** (`camera_settings`, per logical ID, not per serial, because they belong to the lane position). They are applied on every (re)open and saved after the camera accepted an apply. The default trigger is hardware (V1: external PLC).
 - **Bench option `--free-run`.** It forces free-run at open and is never saved.
 - **Replay** (`--replay <session>`). It uses a fixed map from the recorded indices and neither reads nor writes `camera_map` or `camera_settings`.
+- **Record tool** (`vsort_record --root <dir>`, P20.95). It loads `camera_settings` of that service root and applies them per logical camera ID (exposure, gain, trigger, edge, ROI); `--exposure-us`, `--gain-db` and `--trigger` override them for all cameras. A camera without saved settings, or with a software trigger, stops the tool before a session is created. The service must be stopped (a camera opens in one process only). Shortcuts: serials are still given with `--camera <id>=<serial>` (`camera_map` is not read); the applied settings are stored only as text in the session label, not as fields of `session.json`; if `camera_settings` does not exist yet, the config store creates it with its defaults (no cameras).
 - **Change events.** Changes of the camera list or of a camera state are announced with the event `CameraListChanged` (MSG-30-02). The HMI then fetches the list again.
 - **Open limits.** The camera map is read once at start (editing it at runtime comes with G20.20). The HMI settings page does not edit trigger mode yet.
 
@@ -474,6 +475,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P20.70 [DONE]** Build the replay camera (M30.20): plays recordings through `ICamera` at original or adjustable rate, with loop support.
 - **P20.80 [DONE]** Add camera mapping in config: serial number → logical camera ID.
 - **P20.90 [DONE]** Build a CLI record tool and record initial datasets on the existing machine.
+- **P20.95 [PARTIALLY_DONE]** Record tool applies the saved camera settings per camera (`--root`, section 40.20).
 
 **Done when:** all cameras grab on the external trigger without drops at target rate, and datasets are recorded.
 

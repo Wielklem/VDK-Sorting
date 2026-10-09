@@ -17,6 +17,9 @@
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
+#include <vsort/camera/camera_settings_config.hpp>
+#include <vsort/common/config_store.hpp>
+#include <vsort/common/message_bus.hpp>
 #include <vsort/common/timestamp.hpp>
 
 #include "record_session.hpp"
@@ -151,7 +154,9 @@ protected:
         plan.label = "unit test";
         plan.cameras = {CameraSpec{.index = 0, .serial = "SN0"},
                         CameraSpec{.index = 1, .serial = "SN1"}};
-        plan.settings.exposureUs = 5000.0;
+        plan.cameras[0].settings.exposureUs = 5000.0;
+        plan.cameras[1].settings.exposureUs = 750.0;
+        plan.cameras[1].settings.gainDb = 10.0;
         plan.queueDepth = 64;
         return plan;
     }
@@ -180,15 +185,79 @@ TEST(RecordPool, MakePlanCopiesTheOptions) {
     options.framesPerCamera = 7;
     options.queueDepth = 16;
 
-    const RecordPlan plan = makePlan(options);
-    EXPECT_EQ(plan.outDir, fs::path{"out"});
-    EXPECT_EQ(plan.cameras.size(), 1U);
-    EXPECT_DOUBLE_EQ(plan.settings.exposureUs, 1234.0);
-    EXPECT_DOUBLE_EQ(plan.settings.gainDb, 2.0);
-    EXPECT_EQ(plan.settings.triggerMode, camera::TriggerMode::FreeRun);
-    EXPECT_EQ(plan.duration, 5000ms);
-    EXPECT_EQ(plan.framesPerCamera, 7U);
-    EXPECT_EQ(plan.queueDepth, 16U);
+    const auto plan = makePlan(options);
+    ASSERT_TRUE(plan.has_value()) << plan.error().what();
+    EXPECT_EQ(plan->outDir, fs::path{"out"});
+    ASSERT_EQ(plan->cameras.size(), 1U);
+    const auto& settings = plan->cameras[0].settings;
+    EXPECT_DOUBLE_EQ(settings.exposureUs, 1234.0);
+    EXPECT_DOUBLE_EQ(settings.gainDb, 2.0);
+    EXPECT_EQ(settings.triggerMode, camera::TriggerMode::FreeRun);
+    EXPECT_EQ(plan->duration, 5000ms);
+    EXPECT_EQ(plan->framesPerCamera, 7U);
+    EXPECT_EQ(plan->queueDepth, 16U);
+}
+
+TEST(RecordPool, MakePlanWithoutOverridesUsesTheDefaults) {
+    Options options;
+    options.cameras = {CameraSpec{.index = 0, .serial = "SN0"}};
+    const auto plan = makePlan(options);
+    ASSERT_TRUE(plan.has_value()) << plan.error().what();
+    const auto& settings = plan->cameras[0].settings;
+    EXPECT_DOUBLE_EQ(settings.exposureUs, 10000.0);
+    EXPECT_DOUBLE_EQ(settings.gainDb, 0.0);
+    EXPECT_EQ(settings.triggerMode, camera::TriggerMode::Hardware);
+}
+
+TEST(RecordPool, MakePlanUsesTheSavedSettingsPerCamera) {
+    SavedSettings saved;
+    saved[0] =
+        camera::CameraSettings{.exposureUs = 750.0,
+                               .gainDb = 10.0,
+                               .roi = camera::Roi{.x = 8, .y = 4, .width = 640, .height = 480},
+                               .triggerMode = camera::TriggerMode::Hardware,
+                               .triggerEdge = camera::TriggerEdge::Falling};
+    saved[1].exposureUs = 500.0;
+    saved[1].gainDb = 14.0;
+
+    Options options;
+    options.cameras = {CameraSpec{.index = 0, .serial = "SN0"},
+                       CameraSpec{.index = 1, .serial = "SN1"}};
+    auto plan = makePlan(options, &saved);
+    ASSERT_TRUE(plan.has_value()) << plan.error().what();
+    const auto& cam0 = plan->cameras[0].settings;
+    EXPECT_DOUBLE_EQ(cam0.exposureUs, 750.0);
+    EXPECT_DOUBLE_EQ(cam0.gainDb, 10.0);
+    EXPECT_EQ(cam0.triggerEdge, camera::TriggerEdge::Falling);
+    EXPECT_EQ(cam0.roi.width, 640U);
+    EXPECT_DOUBLE_EQ(plan->cameras[1].settings.gainDb, 14.0);
+
+    options.gainDb = 3.0; // an override replaces the saved value for every camera
+    plan = makePlan(options, &saved);
+    ASSERT_TRUE(plan.has_value()) << plan.error().what();
+    EXPECT_DOUBLE_EQ(plan->cameras[0].settings.gainDb, 3.0);
+    EXPECT_DOUBLE_EQ(plan->cameras[1].settings.gainDb, 3.0);
+    EXPECT_DOUBLE_EQ(plan->cameras[1].settings.exposureUs, 500.0);
+    EXPECT_EQ(describeSettings(plan->cameras[0].settings),
+              "exposure 750 us, gain 3 dB, trigger hardware (falling), roi 640x480 at 8,4");
+}
+
+TEST(RecordPool, MakePlanRejectsMissingSettingsAndSoftwareTrigger) {
+    SavedSettings saved;
+    saved[0].triggerMode = camera::TriggerMode::Software;
+    Options options;
+    options.cameras = {CameraSpec{.index = 1, .serial = "SN1"}};
+    const auto missing = makePlan(options, &saved);
+    ASSERT_FALSE(missing.has_value());
+    EXPECT_NE(missing.error().message.find("camera 1: no saved settings"), std::string::npos);
+
+    options.cameras = {CameraSpec{.index = 0, .serial = "SN0"}};
+    const auto software = makePlan(options, &saved);
+    ASSERT_FALSE(software.has_value());
+    EXPECT_NE(software.error().message.find("software trigger"), std::string::npos);
+
+    options.trigger = camera::TriggerMode::FreeRun; // the override makes it recordable
+    EXPECT_TRUE(makePlan(options, &saved).has_value());
 }
 
 TEST(RecordReportTest, CleanNeedsFramesAndNoLoss) {
@@ -263,7 +332,8 @@ TEST_F(RecordSessionTest, StopsWhenEveryCameraReachedTheFrameLimit) {
     EXPECT_EQ(session["cameras"][1]["index"], 1);
     const std::string label = session["label"];
     EXPECT_NE(label.find("unit test"), std::string::npos);
-    EXPECT_NE(label.find("exposure 5000 us"), std::string::npos);
+    EXPECT_NE(label.find("cam0: exposure 5000 us"), std::string::npos);
+    EXPECT_NE(label.find("cam1: exposure 750 us, gain 10 dB"), std::string::npos);
     EXPECT_NE(label.find("trigger hardware"), std::string::npos);
     EXPECT_TRUE(fs::exists(report->sessionDir / "cam00.vrec"));
     EXPECT_TRUE(fs::exists(report->sessionDir / "cam01.vrec"));
@@ -299,4 +369,29 @@ TEST_F(RecordSessionTest, MissingCameraFailsBeforeAnySessionExists) {
     ASSERT_FALSE(report.has_value());
     EXPECT_NE(report.error().message.find("MISSING"), std::string::npos);
     EXPECT_FALSE(fs::exists(root_)); // no session folder was created
+}
+
+TEST_F(RecordSessionTest, LoadsTheSavedSettingsOfAServiceRoot) {
+    const fs::path configDir = root_ / "config"; // the rooted layout of vsort_service --root
+    fs::create_directories(configDir);
+    {
+        MessageBus bus;
+        FileConfigStore store{configDir, bus};
+        ASSERT_TRUE(camera::registerCameraSettings(store).has_value());
+        camera::CameraSettings settings;
+        settings.exposureUs = 750.0;
+        settings.gainDb = 15.0;
+        ASSERT_TRUE(camera::saveCameraSettings(store, 1, settings, "test").has_value());
+    }
+    const auto saved = loadSavedSettings(root_);
+    ASSERT_TRUE(saved.has_value()) << saved.error().what();
+    ASSERT_EQ(saved->size(), 1U);
+    EXPECT_DOUBLE_EQ(saved->at(1).gainDb, 15.0);
+}
+
+TEST_F(RecordSessionTest, LoadingFailsWithoutAConfigFolder) {
+    const auto saved = loadSavedSettings(root_ / "nothing");
+    ASSERT_FALSE(saved.has_value());
+    EXPECT_EQ(saved.error().code, Errc::NotFound);
+    EXPECT_FALSE(fs::exists(root_)); // nothing was created
 }

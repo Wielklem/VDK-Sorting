@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -25,17 +26,23 @@ inline constexpr std::size_t kMaxQueueDepth = 1024;
 struct CameraSpec {
     std::uint16_t index{0}; // logical camera ID; names the file camNN.vrec
     std::string serial;
+    camera::CameraSettings settings{}; // filled by makePlan (saved settings and overrides)
 };
 
 struct Options {
     bool help{false};
     bool version{false};
     std::vector<CameraSpec> cameras;
-    std::filesystem::path outDir; // empty = per-user data folder + "recordings"
+    // P20.95: service root (same layout as vsort_service --root). Set: the saved camera_settings
+    // of that root are applied per camera ID, and the default --out is <root>/data/recordings.
+    std::filesystem::path root;
+    std::filesystem::path outDir; // empty = data folder of root (else per-user) + "recordings"
     std::string label;
-    double exposureUs{10000.0};
-    double gainDb{0.0};
-    camera::TriggerMode trigger{camera::TriggerMode::Hardware};
+    // Overrides for every camera; not set = saved setting (with --root) or the CameraSettings
+    // default (exposure 10000 us, gain 0 dB, hardware trigger).
+    std::optional<double> exposureUs;
+    std::optional<double> gainDb;
+    std::optional<camera::TriggerMode> trigger;
     std::chrono::seconds duration{0}; // 0 = until stopped (Ctrl-C) or --frames is reached
     std::uint64_t framesPerCamera{0}; // 0 = no limit
     std::size_t queueDepth{32};

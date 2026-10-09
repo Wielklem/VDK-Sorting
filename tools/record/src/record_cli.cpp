@@ -79,10 +79,10 @@ Result<> validate(const Options& options) {
             }
         }
     }
-    if (!(options.exposureUs > 0.0)) {
+    if (options.exposureUs && !(*options.exposureUs > 0.0)) {
         return makeError(Errc::InvalidArgument, "--exposure-us must be greater than 0");
     }
-    if (!(options.gainDb >= 0.0)) {
+    if (options.gainDb && !(*options.gainDb >= 0.0)) {
         return makeError(Errc::InvalidArgument, "--gain-db must not be negative");
     }
     if (options.queueDepth == 0 || options.queueDepth > kMaxQueueDepth) {
@@ -98,14 +98,17 @@ std::string_view usage() noexcept {
     return "Usage: vsort_record --camera <index>=<serial> [--camera ...] [options]\n"
            "  --camera <idx>=<sn>   camera to record; repeat per camera. <idx> is the logical\n"
            "                        camera ID and names the file (cam<idx>.vrec)\n"
-           "  --out <dir>           sessions are created below <dir>\n"
-           "                        (default: per-user data folder, subfolder recordings)\n"
+           "  --root <dir>          service root (as vsort_service --root): apply its saved\n"
+           "                        camera settings per camera ID (exposure, gain, trigger,\n"
+           "                        edge, ROI). The options below override them for all cameras\n"
+           "  --out <dir>           sessions are created below <dir> (default: data folder of\n"
+           "                        --root, else per-user data folder; subfolder recordings)\n"
            "  --label <text>        free text stored in session.json\n"
            "  --duration <s>        stop after <s> seconds (default: until Ctrl-C)\n"
            "  --frames <n>          stop when every camera delivered at least <n> frames\n"
-           "  --exposure-us <us>    exposure time in microseconds (default 10000)\n"
-           "  --gain-db <db>        gain in dB (default 0)\n"
-           "  --trigger <mode>      hardware (Line0, rising edge; default) | freerun\n"
+           "  --exposure-us <us>    exposure time in microseconds (default: saved, else 10000)\n"
+           "  --gain-db <db>        gain in dB (default: saved, else 0)\n"
+           "  --trigger <mode>      hardware (Line0) | freerun (default: saved, else hardware)\n"
            "  --queue-depth <n>     frames waiting for the disk writer, 1..1024 (default 32)\n"
            "  --log-level <lvl>     trace|debug|info|warn|error|critical|off (default: info)\n"
            "  --version             print version and exit\n"
@@ -151,6 +154,16 @@ Result<Options> parseArgs(std::span<const std::string_view> args) {
                 return std::unexpected{std::move(spec.error())};
             }
             options.cameras.push_back(std::move(*spec));
+        } else if (arg == "--root") {
+            const auto v = value();
+            if (!v) {
+                return std::unexpected{v.error()};
+            }
+            if (v->empty()) {
+                return makeError(Errc::InvalidArgument, "--root must not be empty");
+            }
+            // Command line is UTF-8.
+            options.root = std::filesystem::path{std::u8string{v->begin(), v->end()}};
         } else if (arg == "--out") {
             const auto v = value();
             if (!v) {

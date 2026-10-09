@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <functional>
 #include <iosfwd>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -19,11 +20,13 @@
 
 namespace vsort::record {
 
+// Saved settings per logical camera ID (config module camera_settings, P30.85).
+using SavedSettings = std::map<std::uint16_t, camera::CameraSettings>;
+
 struct RecordPlan {
     std::filesystem::path outDir; // required
     std::string label;
-    std::vector<CameraSpec> cameras;
-    camera::CameraSettings settings;
+    std::vector<CameraSpec> cameras;       // each with the settings to apply
     std::chrono::milliseconds duration{0}; // 0 = no time limit
     std::uint64_t framesPerCamera{0};      // 0 = no frame limit
     std::size_t queueDepth{32};
@@ -52,9 +55,24 @@ using StopCheck = std::function<bool()>;
 // plus headroom for the frames in flight, so the recorder queue never starves the pool.
 [[nodiscard]] std::size_t framePoolSize(std::size_t queueDepth) noexcept;
 
-[[nodiscard]] RecordPlan makePlan(const Options& options);
+// P20.95: loads camera_settings from the config folder of a service root (the layout of
+// vsort_service --root); saved settings are never changed. NotFound: the root has no config
+// folder (wrong --root).
+// Shortcut: when camera_settings does not exist yet, the config store creates it with its
+// defaults (no cameras), as the service does at its first start.
+[[nodiscard]] Result<SavedSettings> loadSavedSettings(const std::filesystem::path& root);
 
-// Opens all cameras and applies the settings first (so a missing camera creates no session),
+// The settings per camera: saved (when `saved` is given; a camera without a saved entry is an
+// error) or the CameraSettings defaults, then the overrides of the options. InvalidArgument: no
+// saved settings for a camera, or a software trigger (nothing sends software triggers here).
+[[nodiscard]] Result<RecordPlan> makePlan(const Options& options,
+                                          const SavedSettings* saved = nullptr);
+
+// One line for the label and the console, e.g. "exposure 750 us, gain 10 dB, trigger hardware
+// (rising), roi full".
+[[nodiscard]] std::string describeSettings(const camera::CameraSettings& settings);
+
+// Opens all cameras and applies their settings first (so a missing camera creates no session),
 // then records until stopRequested() returns true, the duration passes, or every camera has
 // delivered framesPerCamera frames. Prints one progress line per second to `out`.
 // The caller owns the camera type: `factory` makes a closed camera (Daheng, or a fake in tests).
