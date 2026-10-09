@@ -51,12 +51,18 @@ Result<> AnalysisModule::init(ModuleContext& context) {
     const auto rois = config_->get(kRoiModule);
     const auto sensors = makeTrackedSensors(*machine, rois ? *rois : nlohmann::json::object());
 
+    {
+        const std::scoped_lock lock{configMutex_};
+        current_ = std::make_shared<const AnalysisConfig>(analysisConfig_);
+    }
     workers_.clear();
     for (const auto& s : sensors) {
         auto& worker = workers_[s.cameraId];
         if (!worker) {
             worker = std::make_unique<Worker>(options_.frameQueue);
             worker->cameraId = s.cameraId;
+            worker->config = current_;
+            worker->generation = generation_.load(std::memory_order_acquire);
         }
         const auto& params = analysisConfig_.forSensor(s.sensorId);
         SensorRuntime runtime;
@@ -67,6 +73,7 @@ Result<> AnalysisModule::init(ModuleContext& context) {
     }
     if (analysisConfig_.enabled) {
         records_ = bus_->subscribe<ObjectRecord>(options_.recordQueue);
+        configChanges_ = bus_->subscribe<ConfigChanged>(64);
     }
     std::string stages;
     for (const auto name : makeCupPipeline(analysisConfig_.defaults).stageNames()) {
@@ -153,11 +160,48 @@ void AnalysisModule::submit(const camera::Frame& frame) noexcept {
     }
 }
 
+void AnalysisModule::refresh(Worker& worker) {
+    if (generation_.load(std::memory_order_acquire) == worker.generation) {
+        return;
+    }
+    {
+        const std::scoped_lock lock{configMutex_};
+        worker.config = current_;
+        worker.generation = generation_.load(std::memory_order_acquire);
+    }
+    for (auto& s : worker.sensors) {
+        const auto& params = worker.config->forSensor(s.sensor.sensorId);
+        if (params != s.params) {
+            s.params = params;
+            s.pipeline = makeCupPipeline(params);
+        }
+    }
+}
+
+void AnalysisModule::reloadConfig() {
+    auto loaded = loadAnalysisConfig(*config_);
+    if (!loaded) {
+        spdlog::warn("analysis: new config not applied: {}", loaded.error().what());
+        return;
+    }
+    if (loaded->enabled != analysisConfig_.enabled) {
+        spdlog::warn("analysis: 'enabled' changes need a service restart");
+    }
+    {
+        const std::scoped_lock lock{configMutex_};
+        current_ = std::make_shared<const AnalysisConfig>(std::move(*loaded));
+        generation_.fetch_add(1, std::memory_order_acq_rel);
+    }
+    const auto version = config_->version(kAnalysisModule);
+    spdlog::info("analysis: config version {} applied", version ? version->number : 0U);
+}
+
 void AnalysisModule::runWorker(Worker& worker, const std::stop_token& stop) {
     auto nextLog = Timestamp::now() + options_.logInterval;
     while (!stop.stop_requested()) {
         auto frame = worker.queue.tryPop();
         if (frame) {
+            refresh(worker); // a config saved before this frame was taken applies to it
             analyse(worker, *frame);
         } else {
             std::this_thread::sleep_for(1ms);
@@ -202,9 +246,9 @@ void AnalysisModule::analyse(Worker& worker, const camera::Frame& frame) {
             allOk = false;
             continue;
         }
-        if (analysisConfig_.debugEveryN > 0 && !options_.debugDir.empty() &&
-            s.frames % analysisConfig_.debugEveryN == 0) {
-            saveDebug(s, frame, ctx);
+        const auto& cfg = *worker.config;
+        if (cfg.debugEveryN > 0 && !options_.debugDir.empty() && s.frames % cfg.debugEveryN == 0) {
+            saveDebug(s, frame, ctx, cfg.debugMaxImages);
         }
         if (!results_.tryPush(SensorResult{.sensorId = s.sensor.sensorId,
                                            .frameId = meta.frameId,
@@ -220,7 +264,7 @@ void AnalysisModule::analyse(Worker& worker, const camera::Frame& frame) {
 
 // <debugDir>/sensor_<id>/<wall clock ns>_f<frame id>.jpg; names sort by time.
 void AnalysisModule::saveDebug(SensorRuntime& sensor, const camera::Frame& frame,
-                               const AnalysisContext& ctx) {
+                               const AnalysisContext& ctx, std::uint32_t maxImages) {
     namespace fs = std::filesystem;
     const fs::path dir = options_.debugDir / ("sensor_" + std::to_string(sensor.sensor.sensorId));
     std::error_code ec;
@@ -256,7 +300,7 @@ void AnalysisModule::saveDebug(SensorRuntime& sensor, const camera::Frame& frame
         return;
     }
     sensor.debugFiles.push_back(file);
-    while (sensor.debugFiles.size() > analysisConfig_.debugMaxImages) {
+    while (sensor.debugFiles.size() > maxImages) {
         fs::remove(sensor.debugFiles.front(), ec);
         sensor.debugFiles.pop_front();
     }
@@ -300,6 +344,12 @@ void AnalysisModule::runJoin(const std::stop_token& stop) {
         }
         handled += records_->drain(
             [&](const ObjectRecord& record) { join.addRecord(record, Timestamp::now(), out); });
+        bool reload = false;
+        configChanges_->drain(
+            [&](const ConfigChanged& c) { reload = reload || c.module == kAnalysisModule; });
+        if (reload) {
+            reloadConfig();
+        }
         for (const auto& m : out) {
             bus_->publish(m);
         }

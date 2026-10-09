@@ -337,7 +337,7 @@ join thread: result + ObjectRecord (same sensor and frame ID) → Measurement (M
 V1 shortcuts (compared to the final implementation):
 - **mm/px quick fix.** `roi_width_mm` / lane ROI width, only valid while the lane ROI is exactly one cup (200 mm). Replaced by G30.40 calibration (P60.50).
 - **White balance** is not in the camera settings; the default HSV range assumes R 1.2 / G 0.9 / B 2.0 set in the camera.
-- **Read once.** Restart the service after editing `machine`, `rois` or `analysis` (live reload comes with P60.45).
+- **Read once.** Restart the service after editing `machine` or `rois`. A saved `analysis` config is applied from the next frame (P60.45); only `enabled` needs a restart.
 - **Fixed stage list** until the recipe (P60.20).
 - **Last value only.** The cup table keeps the measurements of the last 50 cups; history comes with the results database (P80.10).
 - **No production statistics** (own branch with a dashboard later).
@@ -525,7 +525,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P60.20** Store the pipeline definition in the recipe: ordered stages plus parameters.
 - **P60.30 [PARTIALLY_DONE]** Build the preprocessing stage: colour conversion (done), illumination normalisation.
 - **P60.40 [PARTIALLY_DONE]** Build the segmentation stage: object mask per lane ROI (eqraftvision cups mode, HSV range).
-- **P60.45** HSV sliders with live mask preview in G60.20 Parameters (first part of the G60 page; P60.90 completes it); the service reloads `analysis` on ConfigChanged without a restart.
+- **P60.45 [PARTIALLY_DONE]** HSV sliders with live mask preview in G60.20 Parameters (first part of the G60 page; P60.90 completes it); the service reloads `analysis` on ConfigChanged without a restart. Page "Analytics", tab "Parameters": per channel (H, S, V) the channel as grey with the pixels in its range 50 % green, beside it a histogram and a range slider; fourth picture the result (colour, green = in all three ranges);the range is saved per camera (an override for every sensor of that camera). HMI HSV = OpenCV integer formula.
 - **P60.50** Build G30.40 calibration: px→mm from a calibration target, scale per camera.
 - **P60.60 [PARTIALLY_DONE]** Build the size stage: area, major/minor axis in mm (mm/px via the `roi_width_mm` quick fix until P60.50).
 - **P60.70** Build the dirt % stage: dirt pixel ratio on the shell mask.

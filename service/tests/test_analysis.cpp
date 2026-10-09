@@ -394,3 +394,47 @@ TEST_F(AnalysisModuleTest, PublishesIncomingAndAnalysedRatesPerCamera) {
     EXPECT_GT(analysed, 0.0);
     EXPECT_LE(analysed, incoming);
 }
+
+TEST_F(AnalysisModuleTest, SavedConfigIsAppliedWithoutRestart) {
+    AnalysisModule module{store.get()};
+    ModuleContext context{bus};
+    ASSERT_TRUE(module.init(context).has_value());
+    auto measurements = bus.subscribe<Measurement>();
+    ASSERT_TRUE(module.start().has_value());
+    const auto next = [&] {
+        std::optional<Measurement> got;
+        for (int i = 0; i < 300 && !got; ++i) {
+            got = measurements->tryPop();
+            if (!got) {
+                std::this_thread::sleep_for(10ms);
+            }
+        }
+        return got;
+    };
+    const std::vector<Ellipse> egg{{.centre = {320, 240}, .halfAxes = {90, 60}}};
+
+    const auto first = ellipseFrame(0, 1, egg);
+    module.submit(first->frame);
+    bus.publish(okRecord(1, 1, 1));
+    auto got = next();
+    ASSERT_TRUE(got.has_value());
+    EXPECT_EQ(value(got->values, kKeyCount), 1.0);
+
+    auto c = store->get(kAnalysisModule).value();
+    c["defaults"]["hsv_lower"] = {0, 0, 240}; // the ellipse (V 230) is now out of range
+    ASSERT_TRUE(store->set(kAnalysisModule, c, "test").has_value()); // publishes ConfigChanged
+    for (int i = 0; i < 300 && module.configGeneration() == 0; ++i) {
+        std::this_thread::sleep_for(10ms);
+    }
+    ASSERT_EQ(module.configGeneration(), 1U);
+
+    const auto second = ellipseFrame(0, 2, egg);
+    module.submit(second->frame);
+    bus.publish(okRecord(1, 2, 2));
+    got = next();
+    module.stop();
+    ASSERT_TRUE(got.has_value());
+    EXPECT_EQ(got->cupId, 2);
+    EXPECT_EQ(value(got->values, kKeyCount), 0.0);
+    EXPECT_EQ(value(got->values, kKeyPresent), 0.0);
+}

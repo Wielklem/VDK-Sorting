@@ -5,6 +5,7 @@
 #include <QtQml/qqml.h>
 #include <gtest/gtest.h>
 
+#include "video/hsv_view_item.hpp"
 #include "video/video_item.hpp"
 
 int main(int argc, char* argv[]) {
@@ -15,6 +16,7 @@ int main(int argc, char* argv[]) {
     // The page copies import "VsortHmiTest" (see hmi/CMakeLists.txt): VideoItem must live there
     // too.
     qmlRegisterType<vsort::hmi::VideoItem>("VsortHmiTest", 1, 0, "VideoItem");
+    qmlRegisterType<vsort::hmi::HsvViewItem>("VsortHmiTest", 1, 0, "HsvViewItem");
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     QGuiApplication app(argc, argv);
     ::testing::InitGoogleTest(&argc, argv);

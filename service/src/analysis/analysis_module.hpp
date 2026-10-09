@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -42,7 +43,9 @@ struct AnalysisOptions {
 // frame buffer is released when the pipeline is done. A join thread pairs the results with the
 // ObjectRecords on the bus and publishes Measurements (MSG-60-01) and, every ratesInterval, the
 // incoming and analysed frame rate per camera (CameraRates, P30.86).
-// Reads "machine", "rois" and "analysis" at init; restart the service after editing them.
+// Reads "machine", "rois" and "analysis" at init. A saved "analysis" config (ConfigChanged,
+// MSG-20-01, e.g. the HSV sliders of P60.45) is applied without a restart, from the next frame on;
+// only "enabled" needs a restart. Restart the service after editing "machine" or "rois".
 class AnalysisModule final : public IModule {
 public:
     // `config` must outlive the module.
@@ -72,6 +75,10 @@ public:
     [[nodiscard]] std::uint64_t measurementsPublished() const noexcept {
         return published_.load(std::memory_order_relaxed);
     }
+    // Number of "analysis" configs applied since start (0 = the one read at init).
+    [[nodiscard]] std::uint64_t configGeneration() const noexcept {
+        return generation_.load(std::memory_order_acquire);
+    }
 
 private:
     // Run time of one sensor over one log interval (diagnostics only; production statistics
@@ -100,6 +107,8 @@ private:
             : queue{capacity} {}
         std::uint16_t cameraId{0};
         std::vector<SensorRuntime> sensors;
+        std::shared_ptr<const AnalysisConfig> config; // worker thread
+        std::uint64_t generation{0};                  // of `config`
         BoundedQueue<camera::Frame> queue;
         std::atomic<std::uint64_t> received{0};   // frames submitted (incoming)
         std::atomic<std::uint64_t> analysedOk{0}; // frames every sensor analysed without error
@@ -112,8 +121,11 @@ private:
     };
 
     void runWorker(Worker& worker, const std::stop_token& stop);
+    void refresh(Worker& worker); // takes a newer config, rebuilds changed pipelines
     void analyse(Worker& worker, const camera::Frame& frame);
-    void saveDebug(SensorRuntime& sensor, const camera::Frame& frame, const AnalysisContext& ctx);
+    void saveDebug(SensorRuntime& sensor, const camera::Frame& frame, const AnalysisContext& ctx,
+                   std::uint32_t maxImages);
+    void reloadConfig(); // join thread
     static void logWindow(std::uint16_t cameraId, SensorRuntime& sensor);
     void runJoin(const std::stop_token& stop);
     void publishRates(Timestamp::duration elapsed, std::map<std::uint16_t, RateCounts>& last);
@@ -123,6 +135,10 @@ private:
     AnalysisConfig analysisConfig_;
     MessageBus* bus_{nullptr};
     std::shared_ptr<Subscription<ObjectRecord>> records_;
+    std::shared_ptr<Subscription<ConfigChanged>> configChanges_;
+    mutable std::mutex configMutex_;
+    std::shared_ptr<const AnalysisConfig> current_; // guarded by configMutex_
+    std::atomic<std::uint64_t> generation_{0};
     std::map<std::uint16_t, std::unique_ptr<Worker>> workers_; // by camera ID; fixed after init
     BoundedQueue<SensorResult> results_;
     std::jthread joinThread_;

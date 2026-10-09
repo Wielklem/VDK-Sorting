@@ -38,6 +38,11 @@ public:
     void setConfigJson(const std::string& module, const std::string& json) {
         configs_[module] = json;
     }
+    // What the HMI saved (SetConfig) or what was set above; empty when unknown.
+    [[nodiscard]] std::string configJson(const std::string& module) const {
+        const auto it = configs_.find(module);
+        return it == configs_.end() ? std::string{} : it->second;
+    }
     void setCupSnapshot(std::vector<LaneCupsData> lanes) { cupLanes_ = std::move(lanes); }
     void publishCupUpdate(const LaneCupsData& update);
     [[nodiscard]] int cupSnapshotRequests() const noexcept { return cupSnapshotRequests_; }
