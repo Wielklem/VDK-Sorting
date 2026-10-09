@@ -31,8 +31,12 @@ QtObject {
     readonly property int radius: 6
     readonly property int controlHeight: 44
     readonly property int sideNavWidth: 200 // in-page tab column (left)
-    readonly property int headerHeight: 72 // app header with page tabs
-    readonly property int tabPadding: 28 // horizontal padding inside a page tab
+    readonly property int headerHeight: 140 // app header with page tabs
+    readonly property int tabMinWidth: 300 // minimum page tab width
+    readonly property int tabPadding: 30 // horizontal padding inside a page tab
+    readonly property int navBrandSize: 18 // "Logo Text" in the header
+    readonly property int navTitleSize: 26 // page tab title
+    readonly property int navIdSize: 18 // page tab ID (G30, G140)
     readonly property int indicatorWidth: 3 // accent bar of the selected tab
     readonly property color accentSoft: "#262f81f7" // accent at 15 %: selected side tab
     readonly property color accentTint: "#402f81f7" // accent at 25 %: selected page tab

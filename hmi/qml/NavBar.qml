@@ -18,8 +18,9 @@ Rectangle {
             leftMargin: Theme.padding
             verticalCenter: parent.verticalCenter
         }
-        text: "VDK Sorting"
+        text: "Potatonator"
         variant: VsText.Title
+        font.pixelSize: Theme.navBrandSize
     }
 
     Rectangle {
@@ -58,7 +59,7 @@ Rectangle {
             readonly property bool current: item.index === bar.currentIndex
 
             objectName: "navItem"
-            width: label.implicitWidth + 2 * Theme.tabPadding
+            width: Math.max(Theme.tabMinWidth, label.implicitWidth + 2 * Theme.tabPadding)
             height: ListView.view.height
 
             Item { // tab shape: rounded top corners, open at the bottom edge
@@ -109,7 +110,7 @@ Rectangle {
                     color: item.current ? Theme.textPrimary : Theme.textSecondary
                     opacity: item.current ? 0.8 : 1
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.sizeCaption
+                    font.pixelSize: Theme.navIdSize
                 }
                 Text {
                     id: name
@@ -117,7 +118,7 @@ Rectangle {
                     text: item.title
                     color: item.current ? Theme.textPrimary : Theme.textSecondary
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.sizeBody
+                    font.pixelSize: Theme.navTitleSize
                     font.weight: item.current ? Font.DemiBold : Font.Normal
                 }
             }
