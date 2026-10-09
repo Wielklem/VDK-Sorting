@@ -2,7 +2,8 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Quick QuickControls2)
 qt_standard_project_setup(REQUIRES 6.5)
 
 # Put all QML files in the module root, next to the qmldir (needed for the Theme singleton).
-set(VSORT_QML_NAMES Main Gallery Theme NavBar VsText VsButton VsNumberInput VsTable VsDialog OverlayLayer VsSideTab)
+set(VSORT_QML_NAMES Main Gallery Theme NavBar VsText VsButton VsNumberInput VsTable VsDialog OverlayLayer VsSideTab
+    VsCameraPicker)
 foreach(name IN LISTS VSORT_QML_NAMES)
   set_source_files_properties(qml/${name}.qml PROPERTIES QT_RESOURCE_ALIAS ${name}.qml)
 endforeach()
@@ -41,7 +42,8 @@ qt_add_qml_module(vsort_hmi
     qml/VsTable.qml
     qml/VsDialog.qml
     qml/OverlayLayer.qml
-    qml/VsSideTab.qml)
+    qml/VsSideTab.qml
+    qml/VsCameraPicker.qml)
 
 target_sources(vsort_hmi PRIVATE ${VSORT_HMI_VIDEO_ITEM_SOURCES})
 target_link_libraries(vsort_hmi PRIVATE Qt6::Quick Qt6::QuickControls2 vsort::common
@@ -76,7 +78,7 @@ endif()
 # Linux only, like the gallery self-test above.
 if(VSORT_BUILD_TESTS AND NOT WIN32)
   set(VSORT_GUI_PAGES_DIR ${CMAKE_CURRENT_BINARY_DIR}/gui_tests_pages)
-  foreach(name LiveViewPage CameraTile CameraPicker RoiEditorPage CameraSettingsPage)
+  foreach(name LiveViewPage CameraTile RoiEditorPage CameraSettingsPage)
     set(src ${CMAKE_CURRENT_SOURCE_DIR}/pages/cameras/qml/${name}.qml)
     file(READ ${src} content)
     string(REPLACE "import VsortHmi\n" "import VsortHmiTest\n" content "${content}")
@@ -115,7 +117,8 @@ if(VSORT_BUILD_TESTS AND NOT WIN32)
       qml/VsText.qml
       qml/VsButton.qml
       qml/VsNumberInput.qml
-      qml/OverlayLayer.qml)
+      qml/OverlayLayer.qml
+      qml/VsCameraPicker.qml)
   target_sources(vsort_hmi_gui_tests PRIVATE ${VSORT_HMI_VIDEO_ITEM_SOURCES})
   target_compile_definitions(vsort_hmi_gui_tests PRIVATE
     VSORT_CAMERAS_QML_DIR="${VSORT_GUI_PAGES_DIR}")

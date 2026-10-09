@@ -68,6 +68,9 @@ int main(int argc, char* argv[]) {
     vsort::hmi::ProductMonitorModel productMonitor{serviceClient};
     // NOLINTNEXTLINE(misc-const-correctness): QML calls non-const invokables
     vsort::hmi::AnalysisTuningModel analysisTuning{serviceClient};
+    // Read-only second ROI model: the ROI overlay of the Analytics page follows its own camera.
+    // NOLINTNEXTLINE(misc-const-correctness): QML calls non-const invokables
+    vsort::hmi::RoiEditorModel roiOverlay{serviceClient};
     if (!gallery) {
         const auto loaded = vsort::hmi::loadPagePlugins(vsort::hmi::defaultPluginDir(), registry);
         for (const auto& error : loaded.errors) {
@@ -86,6 +89,7 @@ int main(int argc, char* argv[]) {
         engine.rootContext()->setContextProperty(QStringLiteral("cameraSettings"), &cameraSettings);
         engine.rootContext()->setContextProperty(QStringLiteral("productMonitor"), &productMonitor);
         engine.rootContext()->setContextProperty(QStringLiteral("analysisTuning"), &analysisTuning);
+        engine.rootContext()->setContextProperty(QStringLiteral("roiOverlay"), &roiOverlay);
         serviceClient.start();
     } else if (selfTest) {
         engine.setInitialProperties({{QStringLiteral("selfTest"), true}});

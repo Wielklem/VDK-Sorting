@@ -2,7 +2,9 @@ import QtQuick
 import QtQuick.Controls.Basic
 import VsortHmi
 
-// G60.20 Parameters, HSV editor (P60.45): live pictures of the selected camera in a 2 x 2 grid.
+// G60.20 Parameters, HSV editor (P60.45): live pictures of the selected camera in a 2 x 2 grid,
+// optionally with the camera's ROIs on top ("ROI" check box); Freeze keeps the current picture
+// while the sliders still update the masks.
 // H, S and V: the channel as grey (0..255, H scaled from 0..179) with the pixels inside that
 // channel's range 50 % green; beside each picture the histogram of the channel with the range
 // shaded and a range slider (min / max). Fourth: the result, the colour picture with the pixels
@@ -14,8 +16,9 @@ Rectangle {
 
     required property var live // LiveViewModel
     required property var tuning // AnalysisTuningModel
-    property int cameraIndex: 0 // row of the selected camera
-    property int cameraId: -1
+    required property var rois // RoiEditorModel, read only: the saved ROIs of the camera
+
+    readonly property int cameraId: picker.cameraId
 
     readonly property var channels: [
         {
@@ -47,19 +50,13 @@ Rectangle {
             page.live.attachVideo(page.cameraId, item); // attaching again moves the picture
         }
         page.tuning.selectCamera(page.cameraId);
+        page.rois.selectCamera(page.cameraId);
     }
 
     color: Theme.background
     onCameraIdChanged: page.attach()
 
-    Connections {
-        target: page.live
-        function onModelReset() {
-            page.cameraIndex = 0;
-        }
-    }
-
-    // Live picture (an HsvViewItem) with the "Waiting for frames" hint.
+    // Live picture (an HsvViewItem) with the camera's ROIs and the "Waiting for frames" hint.
     component Picture: Item {
         id: picture
 
@@ -74,6 +71,22 @@ Rectangle {
             anchors.fill: parent
             hsvLower: page.tuning.hsvLower
             hsvUpper: page.tuning.hsvUpper
+        }
+
+        OverlayLayer {
+            anchors.fill: parent
+            sourceSize: item.sourceSize
+            showRois: roiToggle.checked
+            showLanes: false
+            showDetections: false
+            // The ROIs are fractions of the camera image; the overlay wants frame pixels.
+            rois: page.rois.rois.map(r => ({
+                        x: r.x * item.sourceSize.width,
+                        y: r.y * item.sourceSize.height,
+                        width: r.width * item.sourceSize.width,
+                        height: r.height * item.sourceSize.height,
+                        label: r.label
+                    }))
         }
 
         VsText {
@@ -235,25 +248,25 @@ Rectangle {
             }
             spacing: Theme.spacing
 
-            Repeater {
-                model: page.live
-                delegate: VsButton {
-                    id: camButton
+            VsCameraPicker {
+                id: picker
 
-                    required property int index
-                    required property int cameraId
+                anchors.verticalCenter: parent.verticalCenter
+                live: page.live
+                showFreeze: true
+            }
 
-                    objectName: "cameraButton"
-                    text: "Camera " + camButton.cameraId
-                    primary: camButton.index === page.cameraIndex
-                    onClicked: page.cameraIndex = camButton.index
+            CheckBox {
+                id: roiToggle
 
-                    Binding {
-                        target: page
-                        property: "cameraId"
-                        value: camButton.cameraId
-                        when: camButton.index === page.cameraIndex
-                    }
+                objectName: "roiToggle"
+                anchors.verticalCenter: parent.verticalCenter
+                checked: true
+                text: "ROI"
+                contentItem: VsText {
+                    leftPadding: roiToggle.indicator.width + roiToggle.spacing
+                    verticalAlignment: Text.AlignVCenter
+                    text: roiToggle.text
                 }
             }
 
