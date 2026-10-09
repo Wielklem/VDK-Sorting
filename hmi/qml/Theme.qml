@@ -6,6 +6,7 @@ QtObject {
     readonly property color background: "#14181d"
     readonly property color surface: "#1d232a"
     readonly property color surfaceRaised: "#262e37"
+    readonly property color header: "#323c48" // app header, brighter than the side navigation
     readonly property color border: "#3a4552"
     readonly property color textPrimary: "#e8edf2"
     readonly property color textSecondary: "#9aa7b5"
@@ -30,9 +31,11 @@ QtObject {
     readonly property int radius: 6
     readonly property int controlHeight: 44
     readonly property int sideNavWidth: 200 // in-page tab column (left)
-    readonly property int headerHeight: 56 // app header with page tabs
+    readonly property int headerHeight: 72 // app header with page tabs
+    readonly property int tabPadding: 28 // horizontal padding inside a page tab
     readonly property int indicatorWidth: 3 // accent bar of the selected tab
     readonly property color accentSoft: "#262f81f7" // accent at 15 %: selected side tab
+    readonly property color accentTint: "#402f81f7" // accent at 25 %: selected page tab
     readonly property color hover: "#14ffffff" // white at 8 %: hover on flat items
     readonly property int tableRowHeight: 28 // dense data tables (Product Monitor)
     readonly property color rowFilled: "#4B5563" // Product Monitor: cup with product

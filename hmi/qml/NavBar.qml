@@ -8,7 +8,7 @@ Rectangle {
     property int currentIndex: 0
 
     implicitHeight: Theme.headerHeight
-    color: Theme.surface
+    color: Theme.header
 
     VsText {
         id: brand
@@ -44,6 +44,7 @@ Rectangle {
             bottom: parent.bottom
         }
         orientation: ListView.Horizontal
+        spacing: Theme.spacing / 2
         model: bar.model
         interactive: false
         clip: true
@@ -57,30 +58,56 @@ Rectangle {
             readonly property bool current: item.index === bar.currentIndex
 
             objectName: "navItem"
-            width: label.implicitWidth + 2 * Theme.padding
+            width: label.implicitWidth + 2 * Theme.tabPadding
             height: ListView.view.height
 
-            Rectangle {
+            Item { // tab shape: rounded top corners, open at the bottom edge
                 anchors {
                     fill: parent
                     topMargin: Theme.spacing
-                    bottomMargin: Theme.spacing
                 }
-                radius: Theme.radius
-                color: Theme.hover
-                visible: hover.hovered && !item.current
+                clip: true
+
+                Rectangle {
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        top: parent.top
+                    }
+                    height: parent.height + radius // bottom corners fall outside the clip
+                    radius: Theme.radius
+                    color: item.current ? Theme.accentTint : (hover.hovered ? Theme.hover : "transparent")
+                }
+                Rectangle { // accent line on top of the selected tab
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        top: parent.top
+                        leftMargin: Theme.radius
+                        rightMargin: Theme.radius
+                    }
+                    height: Theme.indicatorWidth
+                    radius: height / 2
+                    color: Theme.accent
+                    visible: item.current
+                }
             }
 
             Row {
                 id: label
 
-                anchors.centerIn: parent
+                anchors {
+                    horizontalCenter: parent.horizontalCenter
+                    verticalCenter: parent.verticalCenter
+                    verticalCenterOffset: Theme.spacing / 2 // centre in the tab, not the header
+                }
                 spacing: Theme.spacing
 
                 Text {
                     anchors.baseline: name.baseline
                     text: item.pageId
-                    color: item.current ? Theme.accent : Theme.textDisabled
+                    color: item.current ? Theme.textPrimary : Theme.textSecondary
+                    opacity: item.current ? 0.8 : 1
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.sizeCaption
                 }
@@ -93,20 +120,6 @@ Rectangle {
                     font.pixelSize: Theme.sizeBody
                     font.weight: item.current ? Font.DemiBold : Font.Normal
                 }
-            }
-
-            Rectangle {
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    bottom: parent.bottom
-                    leftMargin: Theme.spacing
-                    rightMargin: Theme.spacing
-                }
-                height: Theme.indicatorWidth
-                radius: height / 2
-                color: Theme.accent
-                visible: item.current
             }
 
             HoverHandler {
