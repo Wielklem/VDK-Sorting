@@ -225,6 +225,32 @@ void FakeService::publishCameraRates(std::uint16_t cameraId, float incomingFps, 
     (void)pub_.send(zmq::buffer(bytes), zmq::send_flags::none);
 }
 
+void FakeService::publishAnalysisOverlay(const AnalysisOverlayData& overlay) {
+    flatbuffers::FlatBufferBuilder fbb{512};
+    std::vector<flatbuffers::Offset<fb::DetectedObject>> objects;
+    for (const auto& o : overlay.objects) {
+        const std::vector<std::int32_t> contour(o.contour.begin(), o.contour.end());
+        objects.push_back(fb::CreateDetectedObject(fbb, fbb.CreateVector(contour), o.counted,
+                                                   static_cast<float>(o.lengthMm),
+                                                   static_cast<float>(o.widthMm)));
+    }
+    const auto& r = overlay.roi;
+    const auto event = fb::CreateAnalysisOverlayEvent(
+        fbb, overlay.cameraId, overlay.sensorId, overlay.frameId, overlay.frameWidth,
+        overlay.frameHeight, static_cast<std::uint32_t>(r.x()), static_cast<std::uint32_t>(r.y()),
+        static_cast<std::uint32_t>(r.width()), static_cast<std::uint32_t>(r.height()),
+        fbb.CreateVector(objects));
+    const auto bytes = ipc::finishEnvelope(fbb,
+                                           {.type = fb::MsgType::AnalysisOverlay,
+                                            .requestId = 0,
+                                            .timestampNs = 0,
+                                            .status = 0,
+                                            .errorText = {}},
+                                           fb::Payload::AnalysisOverlayEvent, event.Union());
+    (void)pub_.send(zmq::buffer(ipc::kTopicAnalysis), zmq::send_flags::sndmore);
+    (void)pub_.send(zmq::buffer(bytes), zmq::send_flags::none);
+}
+
 void FakeService::publishHeartbeat() {
     flatbuffers::FlatBufferBuilder fbb{128};
     const auto event =

@@ -168,6 +168,7 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | MSG-50-01 | ObjectRecord (V1: lane, cup ID, sensor, photo or NO_DATA; one record per sensor and cup) | [V1][REDO] becomes one record per object with all photos and the encoder position |
 | MSG-50-02 | CupUpdate: the changed cups of one lane (cup ID, per sensor Pending/Ok/NoData + measurements) with seq; GetCupSnapshot gives the last 50 cups per lane (section 40.50) | [V1] |
 | MSG-60-01 | Measurement | [V1] |
+| MSG-60-02 | AnalysisOverlay: objects found per frame and sensor (contours, counted, size), topic `ana` | [V1] |
 | MSG-70-01 | Decision | [V1] |
 | MSG-75-01 | EjectCommand | [LATER] |
 | MSG-90-01 | DiagEvent | [V1] |
@@ -530,7 +531,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P60.60 [PARTIALLY_DONE]** Build the size stage: area, major/minor axis in mm (mm/px via the `roi_width_mm` quick fix until P60.50).
 - **P60.70** Build the dirt % stage: dirt pixel ratio on the shell mask.
 - **P60.80** Add multi-photo aggregation: combine measurements per object (max, mean, worst-case rules).
-- **P60.90** Build the G60 pages: stage list, parameters with live preview, debug overlay per stage.
+- **P60.90 [PARTIALLY_DONE]** Build the G60 pages: stage list, parameters with live preview, debug overlay per stage. Done: page "Analytics" with side tabs "Contour (HSV)" and "Detector" (G60.30): the objects the service found in the shown frame (MSG-60-02, matched by frame ID; counted = white outline with size, neighbour = dimmed), ROIs on/off, Freeze, and the detector parameters (mask clean-up, object filter, detection buffer, scale), saved per camera and applied from the next frame. Open: stage list, debug picture per stage.
 - **P60.95** Build the ONNX Runtime stage skeleton for future ML models. [PARTIAL]
 
 **Done when:** measurements appear per object, stages can be swapped, and latency is within budget.

@@ -86,7 +86,7 @@ if(VSORT_BUILD_TESTS AND NOT WIN32)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${src})
   endforeach()
   # G60.20 HSV editor (P60.45)
-  foreach(name HsvEditorView)
+  foreach(name HsvEditorView DetectorView)
     set(src ${CMAKE_CURRENT_SOURCE_DIR}/pages/analytics/qml/${name}.qml)
     file(READ ${src} content)
     string(REPLACE "import VsortHmi\n" "import VsortHmiTest\n" content "${content}")
@@ -108,7 +108,8 @@ if(VSORT_BUILD_TESTS AND NOT WIN32)
     tests/gui/test_overlay_layer_gui.cpp
     tests/gui/test_setup_gui.cpp
     tests/gui/test_product_monitor_gui.cpp
-    tests/gui/test_hsv_editor_gui.cpp)
+    tests/gui/test_hsv_editor_gui.cpp
+    tests/gui/test_detector_gui.cpp)
   qt_add_qml_module(vsort_hmi_gui_tests
     URI VsortHmiTest
     VERSION 1.0

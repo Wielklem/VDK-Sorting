@@ -54,6 +54,11 @@ void VideoItem::onFramesChanged() {
         sourceSize_ = size;
         emit sourceSizeChanged();
     }
+    const qint64 id = has ? static_cast<qint64>(frame->info.frameId) : -1;
+    if (id != frameId_) {
+        frameId_ = id;
+        emit frameIdChanged();
+    }
     update();
 }
 

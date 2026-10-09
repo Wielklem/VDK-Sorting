@@ -11,9 +11,13 @@ Item {
     property var rois: [] // [{x, y, width, height, label}]
     property var lanes: [] // [{x1, y1, x2, y2}]
     property var detections: [] // [{x, y, width, height, label}]
+    // Object outlines (P60.90): [{points: [x0, y0, x1, y1, ...], counted, label}]; counted ones
+    // bright white, the others (neighbour cups) dimmed.
+    property var contours: []
     property bool showRois: true
     property bool showLanes: true
     property bool showDetections: true
+    property bool showContours: true
 
     readonly property bool valid: sourceSize.width > 0 && sourceSize.height > 0 && width > 0 && height > 0
     readonly property real pxScale: valid ? Math.min(width / sourceSize.width, height / sourceSize.height) : 0
@@ -112,6 +116,72 @@ Item {
                     color: Theme.ok
                     text: ol.label(ol.detections, parent.index)
                 }
+            }
+        }
+
+        Canvas {
+            id: contourCanvas
+
+            objectName: "contourCanvas"
+            anchors.fill: parent
+            visible: ol.showContours
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+            onPaint: {
+                const ctx = getContext("2d");
+                ctx.reset();
+                for (const c of ol.contours) {
+                    const p = c.points;
+                    if (p === undefined || p.length < 4)
+                        continue;
+                    ctx.lineWidth = c.counted ? 3 : 2;
+                    ctx.strokeStyle = c.counted ? "#ffffff" : Qt.rgba(1, 1, 1, 0.45);
+                    ctx.beginPath();
+                    ctx.moveTo(p[0] * ol.pxScale, p[1] * ol.pxScale);
+                    for (let i = 2; i + 1 < p.length; i += 2)
+                        ctx.lineTo(p[i] * ol.pxScale, p[i + 1] * ol.pxScale);
+                    ctx.closePath();
+                    ctx.stroke();
+                }
+            }
+
+            Connections {
+                target: ol
+                function onContoursChanged() {
+                    contourCanvas.requestPaint();
+                }
+                function onPxScaleChanged() {
+                    contourCanvas.requestPaint();
+                }
+            }
+        }
+
+        Repeater {
+            model: ol.showContours ? ol.contours.length : 0
+            delegate: VsText {
+                required property int index
+                readonly property var points: ol.contours[index] !== undefined ? ol.contours[index].points : []
+
+                // Above the top-most point of the outline.
+                function topPoint() {
+                    let best = 1;
+                    for (let i = 3; i < points.length; i += 2) {
+                        if (points[i] < points[best])
+                            best = i;
+                    }
+                    return best;
+                }
+
+                objectName: "contourLabel"
+                visible: text !== "" && points.length >= 2
+                x: points.length >= 2 ? points[topPoint() - 1] * ol.pxScale - width / 2 : 0
+                y: points.length >= 2 ? points[topPoint()] * ol.pxScale - height - 2 : 0
+                variant: VsText.Caption
+                color: "#ffffff"
+                style: Text.Outline
+                styleColor: "#000000"
+                wrapMode: Text.NoWrap
+                text: ol.label(ol.contours, index)
             }
         }
     }

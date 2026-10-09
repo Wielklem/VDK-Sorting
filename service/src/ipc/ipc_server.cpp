@@ -8,6 +8,7 @@
 #include <vsort/common/version.hpp>
 
 #include "ipc/cup_messages.hpp"
+#include "ipc/overlay_messages.hpp"
 #include "ipc/rate_messages.hpp"
 
 namespace vsort::service {
@@ -40,6 +41,7 @@ Result<> IpcServer::init(ModuleContext& context) {
     configSub_ = context.bus.subscribe<ConfigChanged>(64);
     cupSub_ = context.bus.subscribe<CupUpdate>(256);
     ratesSub_ = context.bus.subscribe<CameraRates>(16);
+    overlaySub_ = context.bus.subscribe<AnalysisOverlay>(64);
     return {};
 }
 
@@ -174,6 +176,11 @@ void IpcServer::drainBus() {
     if (ratesSub_) {
         ratesSub_->drain([this](const CameraRates& rates) {
             publish(ipc::kTopicCamera, makeCameraRatesEnvelope(rates));
+        });
+    }
+    if (overlaySub_) {
+        overlaySub_->drain([this](const AnalysisOverlay& overlay) {
+            publish(ipc::kTopicAnalysis, makeAnalysisOverlayEnvelope(overlay));
         });
     }
     if (!configSub_) {

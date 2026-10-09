@@ -16,6 +16,8 @@ class VideoItem : public QQuickItem, public IFrameSink {
     Q_OBJECT
     Q_PROPERTY(bool hasFrame READ hasFrame NOTIFY hasFrameChanged)
     Q_PROPERTY(QSize sourceSize READ sourceSize NOTIFY sourceSizeChanged)
+    // Camera frame ID of the newest frame (-1 without a frame); matches the analysis results.
+    Q_PROPERTY(qint64 frameId READ frameId NOTIFY frameIdChanged)
 
 public:
     explicit VideoItem(QQuickItem* parent = nullptr);
@@ -26,10 +28,12 @@ public:
 
     [[nodiscard]] bool hasFrame() const noexcept { return hasFrame_; }
     [[nodiscard]] QSize sourceSize() const noexcept { return sourceSize_; }
+    [[nodiscard]] qint64 frameId() const noexcept { return frameId_; }
 
 signals:
     void hasFrameChanged();
     void sourceSizeChanged();
+    void frameIdChanged();
 
 protected:
     // Render thread, GUI thread blocked: the picture shown for a frame. Default: the frame itself.
@@ -48,6 +52,7 @@ private:
     std::atomic<bool> notifyPending_{false};
     bool hasFrame_{false};      // GUI thread
     QSize sourceSize_;          // GUI thread
+    qint64 frameId_{-1};        // GUI thread
     bool redraw_{false};        // GUI thread; read in updatePaintNode (GUI blocked)
     std::uint64_t lastSeen_{0}; // render thread
     bool showing_{false};       // render thread

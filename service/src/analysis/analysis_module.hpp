@@ -36,6 +36,7 @@ struct AnalysisOptions {
     JoinOptions join;
     std::filesystem::path debugDir; // annotated images (debug_every_n); empty = never
     std::chrono::milliseconds ratesInterval{1000}; // CameraRates on the bus (P30.86)
+    bool publishOverlays{true}; // AnalysisOverlay per analysed frame on the bus (P60.90)
 };
 
 // IModule "analysis" (M60, P60.10). Frames come in through submit() (a camera frame sink) and are

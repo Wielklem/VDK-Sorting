@@ -12,6 +12,7 @@
 #include <vsort/ipc/envelope.hpp>
 #include <vsort/ipc/preview_ring.hpp>
 
+#include "live/analysis_overlay_data.hpp"
 #include "live/cup_data.hpp"
 
 namespace vsort::hmi::test {
@@ -49,6 +50,8 @@ public:
     void publishCameraListChanged(); // like the service when a camera appears or disappears
     // P30.86: one CameraRatesEvent, like the analysis module sends about once per second.
     void publishCameraRates(std::uint16_t cameraId, float incomingFps, float analysedFps);
+    // P60.90: one AnalysisOverlayEvent, like the analysis module sends per analysed frame.
+    void publishAnalysisOverlay(const AnalysisOverlayData& overlay);
 
     [[nodiscard]] int cameraListRequests() const noexcept { return cameraListRequests_; }
     [[nodiscard]] int setPreviewRequests() const noexcept { return setPreviewRequests_; }

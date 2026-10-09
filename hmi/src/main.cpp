@@ -16,6 +16,7 @@
 
 #include "live/analysis_tuning_model.hpp"
 #include "live/camera_settings_model.hpp"
+#include "live/detector_model.hpp"
 #include "live/live_view_model.hpp"
 #include "live/product_monitor_model.hpp"
 #include "live/roi_editor_model.hpp"
@@ -71,6 +72,8 @@ int main(int argc, char* argv[]) {
     // Read-only second ROI model: the ROI overlay of the Analytics page follows its own camera.
     // NOLINTNEXTLINE(misc-const-correctness): QML calls non-const invokables
     vsort::hmi::RoiEditorModel roiOverlay{serviceClient};
+    // NOLINTNEXTLINE(misc-const-correctness): QML calls non-const invokables
+    vsort::hmi::DetectorModel detector{serviceClient};
     if (!gallery) {
         const auto loaded = vsort::hmi::loadPagePlugins(vsort::hmi::defaultPluginDir(), registry);
         for (const auto& error : loaded.errors) {
@@ -90,6 +93,7 @@ int main(int argc, char* argv[]) {
         engine.rootContext()->setContextProperty(QStringLiteral("productMonitor"), &productMonitor);
         engine.rootContext()->setContextProperty(QStringLiteral("analysisTuning"), &analysisTuning);
         engine.rootContext()->setContextProperty(QStringLiteral("roiOverlay"), &roiOverlay);
+        engine.rootContext()->setContextProperty(QStringLiteral("detectorModel"), &detector);
         serviceClient.start();
     } else if (selfTest) {
         engine.setInitialProperties({{QStringLiteral("selfTest"), true}});
