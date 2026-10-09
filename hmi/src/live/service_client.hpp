@@ -14,6 +14,7 @@
 
 #include <vsort/ipc/envelope.hpp>
 
+#include "live/analysis_overlay_data.hpp"
 #include "live/camera_info.hpp"
 #include "live/cup_data.hpp"
 
@@ -65,6 +66,7 @@ signals:
     void cupSnapshotReceived(const QVector<vsort::hmi::LaneCupsData>& lanes);
     void cupUpdateReceived(const vsort::hmi::LaneCupsData& update);
     void cameraRatesReceived(const QVector<vsort::hmi::CameraRateData>& rates);
+    void analysisOverlayReceived(const vsort::hmi::AnalysisOverlayData& overlay); // P60.90
 
 private:
     void poll();

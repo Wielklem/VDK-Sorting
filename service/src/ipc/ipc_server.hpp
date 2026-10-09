@@ -17,6 +17,7 @@
 #include <vsort/common/module.hpp>
 #include <vsort/ipc/envelope.hpp>
 
+#include "analysis/analysis_overlay.hpp"
 #include "analysis/camera_rates.hpp"
 #include "cups/cup_types.hpp"
 #include "ipc/camera_access.hpp"
@@ -73,6 +74,7 @@ private:
     std::shared_ptr<Subscription<ConfigChanged>> configSub_;
     std::shared_ptr<Subscription<CupUpdate>> cupSub_;
     std::shared_ptr<Subscription<CameraRates>> ratesSub_;
+    std::shared_ptr<Subscription<AnalysisOverlay>> overlaySub_;
 
     zmq::context_t context_{1};
     zmq::socket_t router_;

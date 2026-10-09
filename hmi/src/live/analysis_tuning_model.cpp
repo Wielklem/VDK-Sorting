@@ -2,7 +2,9 @@
 
 #include <QStringList>
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <utility>
 
@@ -15,6 +17,33 @@ const QString kAnalysis = QStringLiteral("analysis");
 const QString kMachine = QStringLiteral("machine");
 
 constexpr std::array<int, 3> kMax{179, 255, 255};
+
+// Number at a flattened key ("a" or "a.b"); nullptr when missing or not a number.
+const nlohmann::json* numberAt(const nlohmann::json& params, const std::string& key) {
+    const auto dot = key.find('.');
+    const nlohmann::json* node = &params;
+    for (const auto& part :
+         dot == std::string::npos
+             ? std::vector<std::string>{key}
+             : std::vector<std::string>{key.substr(0, dot), key.substr(dot + 1)}) {
+        if (!node->is_object() || !node->contains(part)) {
+            return nullptr;
+        }
+        node = &node->at(part);
+    }
+    return node->is_number() ? node : nullptr;
+}
+
+void setAt(nlohmann::json& params, const std::string& key, double value) {
+    const auto dot = key.find('.');
+    nlohmann::json& node =
+        dot == std::string::npos ? params[key] : params[key.substr(0, dot)][key.substr(dot + 1)];
+    if (node.is_number_integer()) {
+        node = static_cast<std::int64_t>(std::llround(value));
+    } else {
+        node = value;
+    }
+}
 
 nlohmann::json parse(const QByteArray& json) {
     return nlohmann::json::parse(json.constData(), json.constData() + json.size(), nullptr, false);
@@ -58,6 +87,45 @@ AnalysisTuningModel::AnalysisTuningModel(ServiceClient& client, QObject* parent)
         client_.requestConfig(kMachine);
         requestLoad(false);
     }
+}
+
+QVariantMap AnalysisTuningModel::params() const {
+    QVariantMap out;
+    const auto add = [&out, this](const std::string& key, const nlohmann::json& v) {
+        if (!v.is_number()) {
+            return;
+        }
+        const auto edit = edits_.find(key);
+        out.insert(QString::fromStdString(key),
+                   edit != edits_.end() ? edit->second : v.get<double>());
+    };
+    for (const auto& [key, value] : shown_.items()) {
+        if (value.is_object()) {
+            for (const auto& [sub, v] : value.items()) {
+                add(key + "." + sub, v);
+            }
+        } else {
+            add(key, value);
+        }
+    }
+    return out;
+}
+
+void AnalysisTuningModel::setParam(const QString& key, double value) {
+    const std::string k = key.toStdString();
+    const auto* current = numberAt(shown_, k);
+    if (current == nullptr) {
+        return;
+    }
+    const double v = current->is_number_integer() ? std::round(value) : value;
+    const auto edit = edits_.find(k);
+    const double before = edit != edits_.end() ? edit->second : current->get<double>();
+    if (v == before) {
+        return;
+    }
+    edits_[k] = v;
+    emit paramsChanged();
+    setDirty(true);
 }
 
 QString AnalysisTuningModel::sensors() const {
@@ -145,6 +213,9 @@ void AnalysisTuningModel::save() {
         auto& params = (*it)["params"];
         params["hsv_lower"] = {lower_[0], lower_[1], lower_[2]};
         params["hsv_upper"] = {upper_[0], upper_[1], upper_[2]};
+        for (const auto& [key, value] : edits_) {
+            setAt(params, key, value);
+        }
     }
     inFlight_.push_back({.save = true, .force = false});
     setStatus(QStringLiteral("Saving..."));
@@ -175,6 +246,9 @@ void AnalysisTuningModel::showCamera() {
         upper_ = upper;
         emit rangeChanged();
     }
+    shown_ = params.is_object() ? params : nlohmann::json::object();
+    edits_.clear();
+    emit paramsChanged();
 }
 
 void AnalysisTuningModel::onConfigReceived(const QString& module, const QByteArray& json,

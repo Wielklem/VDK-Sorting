@@ -22,8 +22,10 @@ add_library(vsort_service_core STATIC
   src/cups/cup_table.cpp
   src/ipc/cup_messages.cpp
   src/ipc/rate_messages.cpp
+  src/ipc/overlay_messages.cpp
   src/analysis/analysis_config.cpp
   src/analysis/analysis_module.cpp
+  src/analysis/analysis_overlay.cpp
   src/analysis/overlay.cpp
   src/analysis/pipeline.cpp
   src/analysis/result_join.cpp

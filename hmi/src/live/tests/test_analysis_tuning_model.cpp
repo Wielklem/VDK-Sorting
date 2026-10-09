@@ -126,3 +126,34 @@ TEST_F(AnalysisTuningModelTest, ReloadDiscardsEdits) {
     ASSERT_TRUE(spinUntil([&] { return !model.dirty(); }, [this] { service.pump(); }));
     EXPECT_EQ(model.hsvLower(), (QList<int>{60, 70, 0}));
 }
+
+TEST_F(AnalysisTuningModelTest, DetectorParamsAreEditedAndSavedPerCamera) {
+    auto p = model.params();
+    EXPECT_DOUBLE_EQ(p.value(QStringLiteral("min_solidity")).toDouble(), 0.85);
+    EXPECT_DOUBLE_EQ(p.value(QStringLiteral("roi_buffer_px.left")).toDouble(), 50.0);
+    EXPECT_FALSE(p.contains(QStringLiteral("hsv_lower"))); // HSV goes through hsvLower/hsvUpper
+
+    model.setParam(QStringLiteral("min_solidity"), 0.7);
+    model.setParam(QStringLiteral("erode_iterations"), 2.4); // integer: rounded
+    model.setParam(QStringLiteral("roi_buffer_px.left"), 20);
+    model.setParam(QStringLiteral("no_such_key"), 1); // ignored
+    EXPECT_TRUE(model.dirty());
+    p = model.params();
+    EXPECT_DOUBLE_EQ(p.value(QStringLiteral("min_solidity")).toDouble(), 0.7);
+    EXPECT_DOUBLE_EQ(p.value(QStringLiteral("erode_iterations")).toDouble(), 2.0);
+
+    model.save();
+    ASSERT_TRUE(spinUntil([&] { return !model.dirty() && model.status().startsWith("Saved"); },
+                          [this] { service.pump(); }));
+    const auto config = saved();
+    for (const int id : {1, 3}) {
+        const auto& params = sensorEntry(config, id)->at("params");
+        EXPECT_DOUBLE_EQ(params.at("min_solidity").get<double>(), 0.7) << id;
+        EXPECT_TRUE(params.at("erode_iterations").is_number_integer()) << id;
+        EXPECT_EQ(params.at("erode_iterations").get<int>(), 2) << id;
+        EXPECT_EQ(params.at("roi_buffer_px").at("left").get<int>(), 20) << id;
+        EXPECT_EQ(params.at("roi_buffer_px").at("top").get<int>(), 50) << id; // untouched
+    }
+    EXPECT_DOUBLE_EQ(config.at("defaults").at("min_solidity").get<double>(), 0.85);
+    EXPECT_DOUBLE_EQ(model.params().value(QStringLiteral("min_solidity")).toDouble(), 0.7);
+}

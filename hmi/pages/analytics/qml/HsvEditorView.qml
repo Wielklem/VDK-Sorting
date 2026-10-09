@@ -17,6 +17,7 @@ Rectangle {
     required property var live // LiveViewModel
     required property var tuning // AnalysisTuningModel
     required property var rois // RoiEditorModel, read only: the saved ROIs of the camera
+    property int cameraIndex: 0 // shared with the other Analytics tab
 
     readonly property int cameraId: picker.cameraId
 
@@ -254,6 +255,8 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 live: page.live
                 showFreeze: true
+                Component.onCompleted: currentIndex = page.cameraIndex
+                onCurrentIndexChanged: page.cameraIndex = currentIndex
             }
 
             CheckBox {

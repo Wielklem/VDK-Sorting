@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -17,9 +18,11 @@
 
 #include "analysis/analysis_config.hpp"
 #include "analysis/analysis_module.hpp"
+#include "analysis/analysis_overlay.hpp"
 #include "analysis/camera_rates.hpp"
 #include "analysis/pipeline.hpp"
 #include "analysis/result_join.hpp"
+#include "ipc/overlay_messages.hpp"
 #include "test_ipc_util.hpp"
 
 using namespace vsort;
@@ -437,4 +440,88 @@ TEST_F(AnalysisModuleTest, SavedConfigIsAppliedWithoutRestart) {
     EXPECT_EQ(got->cupId, 2);
     EXPECT_EQ(value(got->values, kKeyCount), 0.0);
     EXPECT_EQ(value(got->values, kKeyPresent), 0.0);
+}
+
+TEST(AnalysisOverlay, ObjectsInFramePixelsWithCountedFlag) {
+    // Lane ROI x 200..440 of a 640 x 480 frame, detection buffer 50 px: crop starts at x 150.
+    const auto f = ellipseFrame(0, 9,
+                                {{.centre = {320, 240}, .halfAxes = {80, 60}},   // in the ROI
+                                 {.centre = {150, 240}, .halfAxes = {40, 40}}}); // neighbour
+    auto params = testParams();
+    params.roiBufferPx = {.left = 50, .top = 0, .right = 50, .bottom = 0};
+    const camera::Roi lane{.x = 200, .y = 0, .width = 240, .height = 480};
+    const auto region = analysisRegion(lane, params.roiBufferPx, 640, 480, 1);
+    AnalysisContext ctx;
+    ASSERT_TRUE(prepareContext(f->frame, region, ctx).has_value());
+    std::vector<StageTiming> timings;
+    ASSERT_TRUE(makeCupPipeline(params).run(ctx, timings).has_value());
+
+    const auto overlay = makeOverlay(ctx, region, lane, f->frame.meta, 3);
+    EXPECT_EQ(overlay.cameraId, 0);
+    EXPECT_EQ(overlay.sensorId, 3);
+    EXPECT_EQ(overlay.frameId, 9U);
+    EXPECT_EQ(overlay.frameWidth, 640U);
+    EXPECT_EQ(overlay.lane.x, 200U);
+    ASSERT_EQ(overlay.objects.size(), 2U);
+    const auto& egg = overlay.objects[0];
+    EXPECT_TRUE(egg.counted);
+    EXPECT_FALSE(overlay.objects[1].counted);
+    EXPECT_NEAR(egg.lengthMm, 160.0, 3.0); // mm_per_px 1
+    ASSERT_GE(egg.contour.size(), 8U);
+    ASSERT_EQ(egg.contour.size() % 2, 0U);
+    int minX = 10000;
+    int maxX = 0;
+    for (std::size_t i = 0; i < egg.contour.size(); i += 2) {
+        minX = std::min(minX, egg.contour[i]);
+        maxX = std::max(maxX, egg.contour[i]);
+    }
+    EXPECT_NEAR(minX, 240, 3); // frame pixels, not crop pixels
+    EXPECT_NEAR(maxX, 400, 3);
+}
+
+TEST_F(AnalysisModuleTest, PublishesAnOverlayPerAnalysedFrame) {
+    AnalysisModule module{store.get()};
+    ModuleContext context{bus};
+    ASSERT_TRUE(module.init(context).has_value());
+    auto overlays = bus.subscribe<AnalysisOverlay>();
+    ASSERT_TRUE(module.start().has_value());
+    module.submit(ellipseFrame(0, 4, {{.centre = {320, 240}, .halfAxes = {90, 60}}})->frame);
+    std::optional<AnalysisOverlay> got;
+    for (int i = 0; i < 300 && !got; ++i) {
+        got = overlays->tryPop();
+        if (!got) {
+            std::this_thread::sleep_for(10ms);
+        }
+    }
+    module.stop();
+    ASSERT_TRUE(got.has_value());
+    EXPECT_EQ(got->frameId, 4U);
+    EXPECT_EQ(got->sensorId, 1);
+    ASSERT_EQ(got->objects.size(), 1U);
+    EXPECT_TRUE(got->objects[0].counted);
+}
+
+TEST(AnalysisOverlay, EnvelopeCarriesFrameRoiAndContours) {
+    AnalysisOverlay overlay{
+        .cameraId = 2,
+        .sensorId = 3,
+        .frameId = 77,
+        .frameWidth = 640,
+        .frameHeight = 480,
+        .lane = {.x = 10, .y = 20, .width = 300, .height = 400},
+        .objects = {
+            {.contour = {1, 2, 3, 4, 5, 6}, .counted = true, .lengthMm = 61.5, .widthMm = 44.0}}};
+    const auto bytes = makeAnalysisOverlayEnvelope(overlay);
+    const auto env = ipc::parseEnvelope(bytes);
+    ASSERT_TRUE(env.has_value());
+    EXPECT_EQ((*env)->msg_type(), static_cast<std::uint16_t>(ipc::fb::MsgType::AnalysisOverlay));
+    const auto* e = (*env)->payload_as_AnalysisOverlayEvent();
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(e->camera_id(), 2);
+    EXPECT_EQ(e->frame_id(), 77U);
+    EXPECT_EQ(e->roi_width(), 300U);
+    ASSERT_EQ(e->objects()->size(), 1U);
+    EXPECT_TRUE(e->objects()->Get(0)->counted());
+    EXPECT_EQ(e->objects()->Get(0)->contour()->size(), 6U);
+    EXPECT_FLOAT_EQ(e->objects()->Get(0)->length_mm(), 61.5F);
 }

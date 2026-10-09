@@ -13,6 +13,7 @@
 #include <vsort/common/roi_config.hpp>
 #include <vsort/common/timestamp.hpp>
 
+#include "analysis/analysis_overlay.hpp"
 #include "analysis/overlay.hpp"
 #include "tracking/lane_crop.hpp"
 
@@ -249,6 +250,9 @@ void AnalysisModule::analyse(Worker& worker, const camera::Frame& frame) {
         const auto& cfg = *worker.config;
         if (cfg.debugEveryN > 0 && !options_.debugDir.empty() && s.frames % cfg.debugEveryN == 0) {
             saveDebug(s, frame, ctx, cfg.debugMaxImages);
+        }
+        if (options_.publishOverlays) {
+            bus_->publish(makeOverlay(ctx, region, lane, meta, s.sensor.sensorId));
         }
         if (!results_.tryPush(SensorResult{.sensorId = s.sensor.sensorId,
                                            .frameId = meta.frameId,

@@ -23,7 +23,8 @@ enum MsgType : uint16 {
   SetConfig = 3016,
   ObjectRecord = 5001,         // MSG-50-01 (not published yet)
   CupUpdate = 5002,            // MSG-50-02, topic "cups"
-  GetCupSnapshot = 5010
+  GetCupSnapshot = 5010,
+  AnalysisOverlay = 6002       // MSG-60-02, topic "ana" (P60.90)
 }
 
 table CameraSettings {
@@ -155,6 +156,30 @@ table LaneCups {
 }
 table CupSnapshotReply { lanes: [LaneCups]; }
 
+// ---- Analysis (P60.90) ----
+// One object the segmentation found; contour in frame pixels, simplified to about 1 px.
+table DetectedObject {
+  contour: [int32];   // x0, y0, x1, y1, ...
+  counted: bool;      // centred in the lane ROI; false = belongs to a neighbour cup
+  length_mm: float;
+  width_mm: float;
+}
+
+// MSG-60-02: per analysed frame and sensor (G60.30 detector view). frame_id matches the preview
+// frames of that camera.
+table AnalysisOverlayEvent {
+  camera_id: uint16;
+  sensor_id: uint16;
+  frame_id: uint64;
+  frame_width: uint32;   // size of the camera frame the coordinates belong to
+  frame_height: uint32;
+  roi_x: uint32;         // lane ROI in frame pixels
+  roi_y: uint32;
+  roi_width: uint32;
+  roi_height: uint32;
+  objects: [DetectedObject];
+}
+
 union Payload {
 
   HelloRequest, HelloReply,
@@ -166,7 +191,8 @@ union Payload {
   HeartbeatEvent, ConfigChangedEvent, PreviewStreamChangedEvent, CameraListChangedEvent,
   ObjectRecord,
   CupUpdateEvent, GetCupSnapshotRequest, CupSnapshotReply,
-  CameraRatesEvent
+  CameraRatesEvent,
+  AnalysisOverlayEvent
 
 }
 

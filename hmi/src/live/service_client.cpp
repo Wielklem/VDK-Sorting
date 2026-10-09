@@ -331,6 +331,33 @@ void ServiceClient::handleMessage(std::span<const std::uint8_t> bytes) {
         emit cameraRatesReceived(rates);
         break;
     }
+    case fb::Payload::AnalysisOverlayEvent: {
+        const auto* event = envelope.payload_as_AnalysisOverlayEvent();
+        AnalysisOverlayData overlay{.cameraId = event->camera_id(),
+                                    .sensorId = event->sensor_id(),
+                                    .frameId = event->frame_id(),
+                                    .frameWidth = event->frame_width(),
+                                    .frameHeight = event->frame_height(),
+                                    .roi = QRect{static_cast<int>(event->roi_x()),
+                                                 static_cast<int>(event->roi_y()),
+                                                 static_cast<int>(event->roi_width()),
+                                                 static_cast<int>(event->roi_height())},
+                                    .objects = {}};
+        if (const auto* list = event->objects(); list != nullptr) {
+            for (const auto* o : *list) {
+                DetectedObjectData object{.contour = {},
+                                          .counted = o->counted(),
+                                          .lengthMm = o->length_mm(),
+                                          .widthMm = o->width_mm()};
+                if (const auto* contour = o->contour(); contour != nullptr) {
+                    object.contour = QList<int>(contour->begin(), contour->end());
+                }
+                overlay.objects.push_back(std::move(object));
+            }
+        }
+        emit analysisOverlayReceived(overlay);
+        break;
+    }
     default:
         break; // not needed by the live view
     }

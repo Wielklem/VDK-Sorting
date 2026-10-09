@@ -11,6 +11,7 @@ Row {
     property bool showFreeze: false
     property int cameraId: -1 // set by the Binding of the selected row below
     property bool frozen: false // same
+    property alias currentIndex: combo.currentIndex // row of the selected camera
 
     spacing: Theme.spacing
 
