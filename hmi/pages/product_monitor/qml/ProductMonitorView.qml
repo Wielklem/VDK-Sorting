@@ -187,11 +187,20 @@ Rectangle {
             required property var cells
             required property var values
 
-            // Cup with product (presence column "present"): lighter row. Empty or not measured: dark.
-            readonly property bool filled: rowItem.cells.indexOf("present") >= 0
-            readonly property color rowColor: rowItem.filled
-                ? (rowItem.index % 2 === 0 ? Theme.rowFilled : Qt.lighter(Theme.rowFilled, 1.1))
-                : (rowItem.index % 2 === 0 ? Theme.surface : Theme.surfaceRaised)
+            // Sensors whose presence column says "present". Only their cells get the lighter colour;
+            // the cup column and the other sensors' cells stay dark.
+            readonly property var filledSensors: {
+                const ids = [];
+                const columns = page.monitor.columns;
+                for (let i = 0; i < rowItem.cells.length && i < columns.length; ++i) {
+                    if (rowItem.cells[i] === "present") {
+                        ids.push(columns[i].sensorId);
+                    }
+                }
+                return ids;
+            }
+            readonly property color rowColor: rowItem.index % 2 === 0 ? Theme.surface : Theme.surfaceRaised
+            readonly property color filledColor: rowItem.index % 2 === 0 ? Theme.rowFilled : Qt.lighter(Theme.rowFilled, 1.1)
 
             height: page.cellHeight
 
@@ -220,11 +229,13 @@ Rectangle {
                     required property int index
                     required property string modelData
                     readonly property bool measured: cell.modelData === "value" || cell.modelData === "present" || cell.modelData === "absent"
+                    readonly property var column: page.monitor.columns[cell.index]
+                    readonly property bool filled: cell.column !== undefined && rowItem.filledSensors.indexOf(cell.column.sensorId) >= 0
 
                     objectName: cell.modelData === "nodata" ? "noDataCell" : (cell.modelData === "ok" ? "okCell" : (cell.measured ? "valueCell" : "cell"))
                     width: page.cellWidth
                     height: page.cellHeight
-                    color: cell.modelData === "nodata" ? Theme.error : rowItem.rowColor
+                    color: cell.modelData === "nodata" ? Theme.error : (cell.filled ? rowItem.filledColor : rowItem.rowColor)
                     border.width: Theme.borderWidth
                     border.color: Theme.background
 
