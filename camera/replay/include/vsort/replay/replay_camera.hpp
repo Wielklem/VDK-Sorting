@@ -8,6 +8,7 @@
 
 #include <vsort/camera/camera.hpp>
 #include <vsort/common/error.hpp>
+#include <vsort/replay/replay_clock.hpp>
 
 namespace vsort::replay {
 
@@ -15,6 +16,10 @@ struct ReplayConfig {
     std::filesystem::path sessionDir; // folder written by the Recorder (M30.30)
     double speed{1.0};                // 1.0 = original rate, 2.0 = twice as fast; finite and > 0
     bool loop{false};                 // false: stop at the end; true: start again, forever
+    // REPLAY ONLY: the session's shared clock (ReplayClock::forSession), so all cameras keep
+    // their recorded time relation and loop together. Its speed applies. Empty: this camera
+    // plays on its own clock (its first frame = time 0, its own loop period).
+    std::shared_ptr<ReplayClock> clock;
 };
 
 struct ReplayStats {
@@ -37,8 +42,10 @@ struct ReplayStats {
 //   average frame interval, so the output looks like one continuous stream.
 // - applySettings() is accepted but has no effect on the pixels (they are already recorded).
 //   Exposure and gain are validated and stored. A ROI is NotSupported.
-// - start() always begins at the first frame. isStreaming() stays true until stop(), also after
-//   the end of a non-looping recording; use waitUntilFinished() or stats() for the end.
+// - start() begins at the first frame. With a shared clock (ReplayConfig::clock) the first
+//   camera to start sets the time base and a camera started later joins it (see ReplayClock).
+//   isStreaming() stays true until stop(), also after the end of a non-looping recording; use
+//   waitUntilFinished() or stats() for the end.
 // - setFrameCallback(), setEventCallback() and the lifecycle methods are called from one
 //   control thread. setSpeed(), speed(), stats() and waitUntilFinished() work from any thread.
 class ReplayCamera final : public camera::ICamera {
@@ -67,7 +74,8 @@ public:
     void stop() noexcept override;
     [[nodiscard]] bool isStreaming() const noexcept override;
 
-    // Changes the rate now, also while streaming. InvalidArgument unless finite and > 0.
+    // Changes the rate now, also while streaming; with a shared clock for all its cameras.
+    // InvalidArgument unless finite and > 0.
     [[nodiscard]] Result<> setSpeed(double speed);
     [[nodiscard]] double speed() const noexcept;
 

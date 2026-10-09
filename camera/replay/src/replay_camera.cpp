@@ -28,6 +28,9 @@ namespace fs = std::filesystem;
 using Clock = std::chrono::steady_clock;
 
 constexpr std::int64_t kFallbackIntervalNs = 1'000'000; // loop seam when the interval is unknown
+// A waiting frame re-reads the clock this often, so a speed change made through another camera
+// of a shared session clock takes effect too.
+constexpr std::chrono::milliseconds kRecheck{50};
 constexpr std::uint8_t kMinPixelFormat = 1;
 constexpr std::uint8_t kMaxPixelFormat = 4;
 
@@ -186,14 +189,16 @@ struct ReplayCamera::Impl {
     camera::FrameCallback onFrame;
     camera::CameraEventCallback onEvent;
 
-    // Play clock. Media time 0 is the first frame of the first pass.
+    // Play clock: the session's shared clock (config.clock, REPLAY ONLY, see ReplayClock) or one
+    // of its own made by open() (media time 0 = its own first frame). Guarded by `mutex`.
     mutable std::mutex mutex;
     std::condition_variable wake;
     mutable std::condition_variable done;
-    double speed;
-    Clock::time_point anchorWall;
-    std::int64_t anchorMediaNs{0};
-    std::uint64_t generation{0}; // bumped by setSpeed() to interrupt a wait
+    double speed; // rate for an own clock, and before open()
+    std::shared_ptr<ReplayClock> clock;
+    std::int64_t startMediaNs{0}; // where this start() joined the clock
+    bool attached{false};         // start() attached to the clock; stop() detaches
+    std::uint64_t generation{0};  // bumped by setSpeed() to interrupt a wait
     bool stopRequested{false};
     bool finished{false};
 
@@ -203,10 +208,9 @@ struct ReplayCamera::Impl {
     std::atomic<std::uint64_t> loops{0};
     std::thread thread; // last: destroyed first
 
-    [[nodiscard]] Clock::time_point dueTime(std::int64_t mediaNs) const {
-        const double deltaNs = static_cast<double>(mediaNs - anchorMediaNs) / speed;
-        return anchorWall + std::chrono::duration_cast<Clock::duration>(
-                                std::chrono::duration<double, std::nano>{deltaNs});
+    // mutex held. The clock set by open(); before open() the shared one, if any.
+    [[nodiscard]] ReplayClock* activeClock() const {
+        return clock ? clock.get() : config.clock.get();
     }
 
     // Blocks until the frame is due. False if stop() was requested meanwhile.
@@ -216,12 +220,14 @@ struct ReplayCamera::Impl {
             if (stopRequested) {
                 return false;
             }
-            const auto due = dueTime(mediaNs);
-            if (Clock::now() >= due) {
+            const auto now = Clock::now();
+            const auto due = clock->dueTime(mediaNs);
+            if (now >= due) {
                 return true;
             }
             const auto seen = generation;
-            wake.wait_until(lock, due, [&] { return stopRequested || generation != seen; });
+            wake.wait_until(lock, std::min(due, now + kRecheck),
+                            [&] { return stopRequested || generation != seen; });
         }
     }
 
@@ -253,7 +259,7 @@ struct ReplayCamera::Impl {
                 .deviceTimestampNs = h.deviceTimestampNs == 0
                                          ? 0
                                          : h.deviceTimestampNs + pass * static_cast<std::uint64_t>(
-                                                                            recording.loopPeriodNs),
+                                                                            clock->loopPeriodNs()),
                 .width = h.width,
                 .height = h.height,
                 .strideBytes = h.strideBytes,
@@ -270,17 +276,28 @@ struct ReplayCamera::Impl {
         }
     }
 
-    // Returns when the end is reached (not looping) or stop() is requested.
+    // Returns when the end is reached (not looping) or stop() is requested. Media time of a
+    // frame: recorded host time minus the clock's first frame, plus one loop period per pass.
+    // Frames before startMediaNs were already past when this camera joined a running shared
+    // clock; they are skipped (a frame-ID gap, as with a live camera that starts late).
     void play() {
-        for (std::uint64_t pass = 0;; ++pass) {
+        const std::int64_t base = clock->firstNs();
+        const std::int64_t period = clock->loopPeriodNs();
+        auto pass = static_cast<std::uint64_t>(startMediaNs / period);
+        if (pass > 0 && !config.loop) {
+            return; // joined after the end of the session
+        }
+        for (;; ++pass) {
             for (const auto& entry : recording.frames) {
+                const std::int64_t mediaNs =
+                    std::max<std::int64_t>(0, entry.header.hostTimestampNs - base) +
+                    static_cast<std::int64_t>(pass) * period;
+                if (mediaNs < startMediaNs) {
+                    continue;
+                }
                 // Read first, so the disk read does not delay the frame.
                 auto pixels = std::make_shared<std::vector<std::byte>>(entry.header.payloadBytes);
                 const bool ok = readPayload(entry, *pixels);
-
-                const std::int64_t mediaNs =
-                    std::max<std::int64_t>(0, entry.header.hostTimestampNs - recording.firstNs) +
-                    static_cast<std::int64_t>(pass) * recording.loopPeriodNs;
                 if (!waitUntilDue(mediaNs)) {
                     return;
                 }
@@ -359,6 +376,14 @@ Result<> ReplayCamera::open(std::string_view serial) {
                                  .sensorWidth = first.width,
                                  .sensorHeight = first.height};
     im.settings = camera::CameraSettings{};
+    {
+        // REPLAY ONLY: the session's shared clock keeps the cameras in their recorded relation;
+        // without one this camera plays on its own (its first frame = media time 0).
+        std::scoped_lock lock{im.mutex};
+        im.clock = im.config.clock ? im.config.clock
+                                   : std::make_shared<ReplayClock>(
+                                         im.recording.firstNs, im.recording.loopPeriodNs, im.speed);
+    }
     im.open = true;
 
     auto logger = log::get("replay");
@@ -436,8 +461,8 @@ Result<> ReplayCamera::start() {
     }
     {
         std::scoped_lock lock{im.mutex};
-        im.anchorWall = Clock::now();
-        im.anchorMediaNs = 0;
+        im.startMediaNs = im.clock->attach();
+        im.attached = true;
         im.stopRequested = false;
         im.finished = false;
     }
@@ -447,6 +472,9 @@ Result<> ReplayCamera::start() {
     try {
         im.thread = std::thread{[&im] { im.run(); }};
     } catch (const std::system_error& e) {
+        std::scoped_lock lock{im.mutex};
+        im.clock->detach();
+        im.attached = false;
         return makeError(Errc::Internal, std::format("cannot start replay thread: {}", e.what()));
     }
     im.streaming = true;
@@ -463,6 +491,13 @@ void ReplayCamera::stop() noexcept {
     if (im.thread.joinable()) {
         im.thread.join();
     }
+    {
+        std::scoped_lock lock{im.mutex};
+        if (im.attached) {
+            im.clock->detach();
+            im.attached = false;
+        }
+    }
     im.streaming = false;
 }
 
@@ -477,13 +512,10 @@ Result<> ReplayCamera::setSpeed(double speed) {
     Impl& im = *impl_;
     {
         std::scoped_lock lock{im.mutex};
-        // Re-anchor at the current position, so the speed change does not jump in time.
-        const auto now = Clock::now();
-        const double elapsedNs =
-            std::chrono::duration<double, std::nano>{now - im.anchorWall}.count();
-        im.anchorMediaNs += static_cast<std::int64_t>(elapsedNs * im.speed);
-        im.anchorWall = now;
         im.speed = speed;
+        if (auto* c = im.activeClock()) {
+            c->setSpeed(speed); // re-anchors (no jump); with a shared clock: all cameras
+        }
         ++im.generation;
     }
     im.wake.notify_all();
@@ -492,7 +524,8 @@ Result<> ReplayCamera::setSpeed(double speed) {
 
 double ReplayCamera::speed() const noexcept {
     std::scoped_lock lock{impl_->mutex};
-    return impl_->speed;
+    const auto* c = impl_->activeClock();
+    return c != nullptr ? c->speed() : impl_->speed;
 }
 
 std::uint64_t ReplayCamera::frameCount() const noexcept {

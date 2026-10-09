@@ -2,6 +2,10 @@
 
 #include <utility>
 
+#include <spdlog/spdlog.h>
+
+#include <vsort/replay/replay_clock.hpp>
+
 namespace vsort::service {
 
 ReplayBackend::ReplayBackend(replay::ReplayConfig config,
@@ -18,6 +22,16 @@ Result<std::unique_ptr<ReplayBackend>> ReplayBackend::create(replay::ReplayConfi
         return makeError(Errc::NotFound,
                          "session '" + config.sessionDir.string() + "' has no cameras");
     }
+    // REPLAY ONLY: one clock for all cameras of the session, so they keep their recorded time
+    // relation (start offsets, each sensor's own frame timing during ramps) and loop together.
+    // The machine (P130) links every cup to an encoder value instead; no clock is needed there.
+    auto clock = replay::ReplayClock::forSession(config.sessionDir, config.speed);
+    if (!clock) {
+        return std::unexpected{clock.error()};
+    }
+    spdlog::info("replay: shared session clock for all cameras (replay only), loop {:.3f} s",
+                 static_cast<double>((*clock)->loopPeriodNs()) / 1e9);
+    config.clock = std::move(*clock);
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory,modernize-make-unique): private constructor
     return std::unique_ptr<ReplayBackend>{
         new ReplayBackend{std::move(config), std::move(*cameras)}};
