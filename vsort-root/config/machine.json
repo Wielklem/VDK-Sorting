@@ -19,7 +19,7 @@
                   {"key": "width_mm",  "label": "Width",    "unit": "mm"},
                   {"key": "length_mm", "label": "Length",   "unit": "mm"}
                 ],
-                "name": "Camera 1",
+                "name": "Begin diabolos",
                 "offset_cups": 0,
                 "roi_id": 1,
                 "show_in_monitor": true
@@ -34,7 +34,7 @@
                   {"key": "width_mm",  "label": "Width",    "unit": "mm"},
                   {"key": "length_mm", "label": "Length",   "unit": "mm"}
                 ],
-                "name": "Camera 2",
+                "name": "Bovenaan diabolos",
                 "offset_cups": 0,
                 "roi_id": 1,
                 "show_in_monitor": true
@@ -49,7 +49,7 @@
                   {"key": "width_mm",  "label": "Width",    "unit": "mm"},
                   {"key": "length_mm", "label": "Length",   "unit": "mm"}
                 ],
-                "name": "Camera 3",
+                "name": "Na camerakast",
                 "offset_cups": 0,
                 "roi_id": 1,
                 "show_in_monitor": true
@@ -64,7 +64,7 @@
                   {"key": "width_mm",  "label": "Width",    "unit": "mm"},
                   {"key": "length_mm", "label": "Length",   "unit": "mm"}
                 ],
-                "name": "Camera 4",
+                "name": "CaExitframe",
                 "offset_cups": 0,
                 "roi_id": 0,
                 "show_in_monitor": true

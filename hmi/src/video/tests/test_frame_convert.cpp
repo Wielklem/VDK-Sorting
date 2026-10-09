@@ -1,5 +1,7 @@
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -7,7 +9,11 @@
 
 namespace {
 
+using vsort::hmi::channelMask;
 using vsort::hmi::fitRect;
+using vsort::hmi::HsvRange;
+using vsort::hmi::rangeOverlay;
+using vsort::hmi::rgbToHsv;
 using vsort::hmi::toImage;
 namespace ipc = vsort::ipc;
 
@@ -84,4 +90,54 @@ TEST(FitRect, LetterboxesAndCentres) {
 TEST(FitRect, EmptyInputGivesNullRect) {
     EXPECT_TRUE(fitRect(QSizeF{0, 10}, QSizeF{100, 100}).isNull());
     EXPECT_TRUE(fitRect(QSizeF{10, 10}, QSizeF{0, 100}).isNull());
+}
+
+TEST(HsvEditor, RgbToHsvMatchesOpenCv) {
+    // Reference values from cv::cvtColor(COLOR_RGB2HSV), 8-bit.
+    EXPECT_EQ(rgbToHsv(255, 0, 0), (std::array<int, 3>{0, 255, 255}));
+    EXPECT_EQ(rgbToHsv(0, 255, 0), (std::array<int, 3>{60, 255, 255}));
+    EXPECT_EQ(rgbToHsv(0, 0, 255), (std::array<int, 3>{120, 255, 255}));
+    EXPECT_EQ(rgbToHsv(255, 255, 0), (std::array<int, 3>{30, 255, 255}));
+    EXPECT_EQ(rgbToHsv(128, 128, 128), (std::array<int, 3>{0, 0, 128}));
+    EXPECT_EQ(rgbToHsv(0, 0, 0), (std::array<int, 3>{0, 0, 0}));
+}
+
+TEST(HsvEditor, ChannelMaskAndHistogram) {
+    QImage image{2, 1, QImage::Format_RGB888};
+    image.setPixel(0, 0, qRgb(255, 0, 0));     // H 0, S 255, V 255
+    image.setPixel(1, 0, qRgb(128, 128, 128)); // H 0, S 0, V 128
+    const HsvRange range{.lower = {0, 200, 0}, .upper = {10, 255, 200}};
+
+    std::vector<int> histogram;
+    const auto s = channelMask(image, 1, range, histogram);
+    ASSERT_EQ(s.format(), QImage::Format_RGB888);
+    EXPECT_EQ(s.pixel(0, 0), qRgb(127, 255, 127)); // S 255 (grey 255), in range: 50 % green
+    EXPECT_EQ(s.pixel(1, 0), qRgb(0, 0, 0));       // S 0 (grey 0), out of range
+    ASSERT_EQ(histogram.size(), 256U);
+    EXPECT_EQ(histogram[255], 1);
+    EXPECT_EQ(histogram[0], 1);
+
+    const auto v = channelMask(image, 2, range, histogram);
+    EXPECT_EQ(v.pixel(0, 0), qRgb(255, 255, 255)); // V 255 > 200: out of range, plain grey
+    EXPECT_EQ(v.pixel(1, 0), qRgb(64, 191, 64));   // V 128, in range: grey 128 + 50 % green
+
+    QImage hue{1, 1, QImage::Format_RGB888};
+    hue.setPixel(0, 0, qRgb(0, 0, 255)); // H 120 -> grey 120 * 255 / 179 = 170
+    const auto h = channelMask(hue, 0, range, histogram);
+    EXPECT_EQ(h.pixel(0, 0), qRgb(170, 170, 170)); // H 120 outside 0..10
+    ASSERT_EQ(histogram.size(), 180U);             // H 0..179
+    EXPECT_EQ(histogram[120], 1);
+}
+
+TEST(HsvEditor, RangeOverlayMarksPixelsInAllThreeRangesGreen) {
+    QImage image{2, 1, QImage::Format_RGB888};
+    image.setPixel(0, 0, qRgb(200, 0, 0));     // H 0, S 255, V 200: in range
+    image.setPixel(1, 0, qRgb(128, 128, 128)); // S 0: out
+    std::size_t inRange = 0;
+    const auto out =
+        rangeOverlay(image, HsvRange{.lower = {0, 200, 0}, .upper = {10, 255, 255}}, inRange);
+    EXPECT_EQ(inRange, 1U);
+    ASSERT_EQ(out.format(), QImage::Format_RGB888);
+    EXPECT_EQ(out.pixel(0, 0), qRgb(100, 127, 0));
+    EXPECT_EQ(out.pixel(1, 0), qRgb(128, 128, 128));
 }

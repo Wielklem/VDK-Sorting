@@ -1,2 +1,3 @@
 add_subdirectory(cameras)
+add_subdirectory(analytics)
 add_subdirectory(product_monitor)

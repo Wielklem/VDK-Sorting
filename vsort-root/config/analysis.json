@@ -1,5 +1,5 @@
 {
-  "author": "default",
+  "author": "hmi",
   "data": {
     "debug_every_n": 0,
     "debug_max_images": 200,
@@ -32,8 +32,102 @@
       "roi_width_mm": 200.0
     },
     "enabled": true,
-    "sensors": []
+    "sensors": [
+      {
+        "params": {
+          "dilate_iterations": 1,
+          "erode_iterations": 1,
+          "hsv_lower": [
+            0,
+            97,
+            47
+          ],
+          "hsv_upper": [
+            54,
+            215,
+            255
+          ],
+          "max_aspect_ratio": 3.0,
+          "min_blob_area_px": 100,
+          "min_diameter_px": 100.0,
+          "min_hull_area_px": 6000.0,
+          "min_solidity": 0.85,
+          "mm_per_px": 2.0,
+          "morph_kernel_px": 3,
+          "roi_buffer_px": {
+            "bottom": 50,
+            "left": 50,
+            "right": 50,
+            "top": 50
+          },
+          "roi_width_mm": 200.0
+        },
+        "sensor_id": 1
+      },
+      {
+        "params": {
+          "dilate_iterations": 1,
+          "erode_iterations": 1,
+          "hsv_lower": [
+            0,
+            80,
+            65
+          ],
+          "hsv_upper": [
+            48,
+            200,
+            255
+          ],
+          "max_aspect_ratio": 3.0,
+          "min_blob_area_px": 100,
+          "min_diameter_px": 100.0,
+          "min_hull_area_px": 6000.0,
+          "min_solidity": 0.85,
+          "mm_per_px": 2.0,
+          "morph_kernel_px": 3,
+          "roi_buffer_px": {
+            "bottom": 50,
+            "left": 50,
+            "right": 50,
+            "top": 50
+          },
+          "roi_width_mm": 200.0
+        },
+        "sensor_id": 2
+      },
+      {
+        "params": {
+          "dilate_iterations": 1,
+          "erode_iterations": 1,
+          "hsv_lower": [
+            1,
+            117,
+            22
+          ],
+          "hsv_upper": [
+            63,
+            223,
+            255
+          ],
+          "max_aspect_ratio": 3.0,
+          "min_blob_area_px": 100,
+          "min_diameter_px": 100.0,
+          "min_hull_area_px": 6000.0,
+          "min_solidity": 0.85,
+          "mm_per_px": 2.0,
+          "morph_kernel_px": 3,
+          "roi_buffer_px": {
+            "bottom": 50,
+            "left": 50,
+            "right": 50,
+            "top": 50
+          },
+          "roi_width_mm": 200.0
+        },
+        "sensor_id": 3
+      }
+    ]
   },
-  "time_ns": 1791439072612575835,
-  "version": 1
+  "time_ns": 1791542485389860841,
+  "version": 9
 }

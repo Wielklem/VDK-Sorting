@@ -4,8 +4,9 @@
 #include <QQuickWindow>
 #include <QSGSimpleTextureNode>
 #include <QSGTexture>
-#include <QtQml/qqml.h>
 #include <utility>
+
+#include <QtQml/qqml.h>
 
 #include "video/frame_convert.hpp"
 
@@ -56,6 +57,15 @@ void VideoItem::onFramesChanged() {
     update();
 }
 
+QImage VideoItem::present(const QImage& frame) {
+    return frame;
+}
+
+void VideoItem::redraw() {
+    redraw_ = true;
+    update();
+}
+
 void VideoItem::geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) {
     QQuickItem::geometryChange(newGeometry, oldGeometry);
     update();
@@ -66,23 +76,28 @@ QSGNode* VideoItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* /*dat
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     auto* node = static_cast<QSGSimpleTextureNode*>(oldNode);
 
+    bool draw = std::exchange(redraw_, false) && !base_.isNull();
     if (const auto fresh = mailbox_.takeIfNew(lastSeen_)) {
         if (*fresh == nullptr) {
             showing_ = false;
-        } else if (window() != nullptr) {
-            const QImage image = toImage(**fresh);
-            if (!image.isNull()) {
-                QSGTexture* texture = window()->createTextureFromImage(image);
-                if (texture != nullptr) {
-                    if (node == nullptr) {
-                        node = new QSGSimpleTextureNode; // NOLINT(cppcoreguidelines-owning-memory)
-                        node->setOwnsTexture(true);
-                        node->setFiltering(QSGTexture::Linear);
-                    }
-                    node->setTexture(texture); // deletes the previous texture
-                    showing_ = true;
-                }
+            base_ = QImage{};
+            draw = false;
+        } else {
+            base_ = toImage(**fresh);
+            draw = !base_.isNull();
+        }
+    }
+    if (draw && window() != nullptr) {
+        const QImage image = present(base_);
+        QSGTexture* texture = image.isNull() ? nullptr : window()->createTextureFromImage(image);
+        if (texture != nullptr) {
+            if (node == nullptr) {
+                node = new QSGSimpleTextureNode; // NOLINT(cppcoreguidelines-owning-memory)
+                node->setOwnsTexture(true);
+                node->setFiltering(QSGTexture::Linear);
             }
+            node->setTexture(texture); // deletes the previous texture
+            showing_ = true;
         }
     }
 
