@@ -38,7 +38,7 @@
     { "name": "linux-release", "inherits": "linux-base",   "displayName": "Linux Release", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } },
     { "name": "linux-service-debug", "inherits": "linux-debug", "displayName": "Linux Debug, service only (no Qt)", "cacheVariables": { "VSORT_BUILD_HMI": "OFF" } },
     { "name": "linux-galaxy-debug", "inherits": "linux-service-debug", "displayName": "Linux Debug, service only + Daheng adapter (needs GALAXY_SDK_ROOT)", "cacheVariables": { "VSORT_WITH_GALAXY": "ON" } },
-    { "name": "windows-debug",   "inherits": "windows-base", "displayName": "Windows Debug",   "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" } },
+    { "name": "linux-galaxy-release", "inherits": "linux-release", "displayName": "Linux Release, service only + Daheng adapter (needs GALAXY_SDK_ROOT)", "cacheVariables": { "VSORT_BUILD_HMI": "OFF", "VSORT_WITH_GALAXY": "ON" } },    { "name": "windows-debug",   "inherits": "windows-base", "displayName": "Windows Debug",   "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" } },
     { "name": "windows-release", "inherits": "windows-base", "displayName": "Windows Release", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } }
   ],
   "buildPresets": [
@@ -46,6 +46,7 @@
     { "name": "linux-release",       "configurePreset": "linux-release" },
     { "name": "linux-service-debug", "configurePreset": "linux-service-debug" },
     { "name": "linux-galaxy-debug", "configurePreset": "linux-galaxy-debug" },
+    { "name": "linux-galaxy-release", "configurePreset": "linux-galaxy-release" },
     { "name": "windows-debug",       "configurePreset": "windows-debug" },
     { "name": "windows-release",     "configurePreset": "windows-release" }
   ],
@@ -54,6 +55,7 @@
     { "name": "linux-release",       "configurePreset": "linux-release",       "output": { "outputOnFailure": true } },
     { "name": "linux-service-debug", "configurePreset": "linux-service-debug", "output": { "outputOnFailure": true } },
     { "name": "linux-galaxy-debug", "configurePreset": "linux-galaxy-debug", "output": { "outputOnFailure": true } },
+    { "name": "linux-galaxy-release", "configurePreset": "linux-galaxy-release", "output": { "outputOnFailure": true } },
     { "name": "windows-debug",       "configurePreset": "windows-debug",       "output": { "outputOnFailure": true } },
     { "name": "windows-release",     "configurePreset": "windows-release",     "output": { "outputOnFailure": true } }
   ]
