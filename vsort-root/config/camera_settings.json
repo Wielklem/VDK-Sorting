@@ -4,7 +4,7 @@
     "cameras": [
       {
         "edge": "rising",
-        "exposure_us": 750.0,
+        "exposure_us": 500.0,
         "gain_db": 10.0,
         "id": 0,
         "roi": {
@@ -17,8 +17,8 @@
       },
       {
         "edge": "rising",
-        "exposure_us": 750.0,
-        "gain_db": 15.0,
+        "exposure_us": 500.0,
+        "gain_db": 14.0,
         "id": 1,
         "roi": {
           "height": 0,
@@ -30,7 +30,7 @@
       },
       {
         "edge": "rising",
-        "exposure_us": 750.0,
+        "exposure_us": 500.0,
         "gain_db": 6.0,
         "id": 2,
         "roi": {
@@ -56,6 +56,6 @@
       }
     ]
   },
-  "time_ns": 1791454809848135390,
-  "version": 24
+  "time_ns": 1791557799667086998,
+  "version": 28
 }

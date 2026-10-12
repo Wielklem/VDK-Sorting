@@ -275,6 +275,13 @@ Rectangle {
                     label: "Dilate iterations"
                     to: 20
                 }
+                ParamField {
+                    key: "edge_smooth_sigma_px"
+                    label: "Edge smoothing (0 = off)"
+                    to: 50
+                    decimals: 1
+                    unit: "px"
+                }
 
                 Heading {
                     text: "Object filter"

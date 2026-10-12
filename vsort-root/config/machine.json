@@ -35,7 +35,7 @@
                   {"key": "length_mm", "label": "Length",   "unit": "mm"}
                 ],
                 "name": "Bovenaan diabolos",
-                "offset_cups": 27,
+                "offset_cups": 19,
                 "roi_id": 1,
                 "show_in_monitor": true
               },

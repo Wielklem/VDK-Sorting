@@ -36,6 +36,7 @@ json paramsSchema() {
           {"morph_kernel_px", {{"type", "integer"}, {"minimum", 0}, {"maximum", 51}}},
           {"erode_iterations", {{"type", "integer"}, {"minimum", 0}, {"maximum", 20}}},
           {"dilate_iterations", {{"type", "integer"}, {"minimum", 0}, {"maximum", 20}}},
+          {"edge_smooth_sigma_px", {{"type", "number"}, {"minimum", 0.0}, {"maximum", 50.0}}},
           {"roi_buffer_px", marginSchema()},
           {"min_blob_area_px", {{"type", "integer"}, {"minimum", 0}, {"maximum", 100000000}}},
           {"min_diameter_px", {{"type", "number"}, {"minimum", 0.0}, {"maximum", 100000.0}}},
@@ -53,6 +54,7 @@ json paramsToJson(const AnalysisParams& p) {
                 {"morph_kernel_px", p.morphKernelPx},
                 {"erode_iterations", p.erodeIterations},
                 {"dilate_iterations", p.dilateIterations},
+                {"edge_smooth_sigma_px", p.edgeSmoothSigmaPx},
                 {"roi_buffer_px",
                  {{"left", b.left}, {"top", b.top}, {"right", b.right}, {"bottom", b.bottom}}},
                 {"min_blob_area_px", p.minBlobAreaPx},
@@ -87,6 +89,8 @@ AnalysisParams paramsFromJson(const json& j, const std::string& path, std::strin
     p.morphKernelPx = j.at("morph_kernel_px").get<std::uint32_t>();
     p.erodeIterations = j.at("erode_iterations").get<std::uint32_t>();
     p.dilateIterations = j.at("dilate_iterations").get<std::uint32_t>();
+    // Optional: config files from before this parameter use the default.
+    p.edgeSmoothSigmaPx = j.value("edge_smooth_sigma_px", AnalysisParams{}.edgeSmoothSigmaPx);
     const auto& b = j.at("roi_buffer_px");
     p.roiBufferPx = EdgeMargins{.left = b.at("left").get<std::uint32_t>(),
                                 .top = b.at("top").get<std::uint32_t>(),
@@ -174,7 +178,25 @@ Result<AnalysisConfig> analysisConfigFromJson(const json& j) {
 }
 
 Result<> registerAnalysisConfig(IConfigStore& store) {
-    return store.registerModule(std::string{kAnalysisModule}, analysisSchema(), analysisDefaults());
+    if (auto r = store.registerModule(std::string{kAnalysisModule}, analysisSchema(),
+                                      analysisDefaults());
+        !r) {
+        return r;
+    }
+    // Writes optional parameters added later (with their defaults) into the stored config, so the
+    // HMI sees and can edit every parameter. Nothing missing: identical, no new version.
+    const auto stored = store.get(kAnalysisModule);
+    if (!stored) {
+        return std::unexpected{stored.error()};
+    }
+    const auto parsed = analysisConfigFromJson(*stored);
+    if (!parsed) {
+        return {}; // invalid values: reported by loadAnalysisConfig()
+    }
+    if (auto r = store.set(kAnalysisModule, analysisConfigToJson(*parsed), "migration"); !r) {
+        return std::unexpected{r.error()};
+    }
+    return {};
 }
 
 Result<AnalysisConfig> loadAnalysisConfig(const IConfigStore& store) {

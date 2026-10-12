@@ -38,6 +38,9 @@ struct AnalysisParams {
     std::uint32_t morphKernelPx{3};    // ellipse kernel for erode and dilate; 0 = none
     std::uint32_t erodeIterations{1};  // removes noise specks (eats into the edge)
     std::uint32_t dilateIterations{1}; // reconnects fragments
+    // Blur + re-threshold of the mask (Gaussian sigma): rounds the outline, trims spurs and fills
+    // notches. 0 = off. Optional in the config file (older files get this default).
+    double edgeSmoothSigmaPx{4.0};
     // Detection runs this far around the lane ROI, so an object on the ROI edge is seen whole.
     // Only objects whose centre lies inside the ROI count; the others belong to a neighbour cup.
     EdgeMargins roiBufferPx{.left = 50, .top = 50, .right = 50, .bottom = 50};

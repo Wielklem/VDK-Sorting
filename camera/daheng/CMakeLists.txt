@@ -13,6 +13,17 @@ find_library(GALAXY_GXIAPI_LIBRARY NAMES gxiapi
   NO_DEFAULT_PATH REQUIRED)
 find_package(Threads REQUIRED)
 
+# The Ex capture API exists in SDK >= 2.5 (PC); the ARM SDK 2.4 only has the legacy callback.
+set(VSORT_GALAXY_HAS_CALLBACK_EX OFF)
+file(GLOB _galaxyHeaders "${GALAXY_SDK_ROOT}/inc/*.h")
+foreach(_header IN LISTS _galaxyHeaders)
+  file(STRINGS "${_header}" _hit REGEX "GX_API[ \t]+GXRegisterCaptureCallbackEx")
+  if(_hit)
+    set(VSORT_GALAXY_HAS_CALLBACK_EX ON)
+  endif()
+endforeach()
+message(STATUS "Galaxy SDK Ex capture callback: ${VSORT_GALAXY_HAS_CALLBACK_EX}")
+
 add_library(vsort_camera_daheng STATIC
   src/galaxy_lib.cpp
   src/daheng_discovery.cpp
