@@ -121,6 +121,19 @@ template <typename P>
     return reinterpret_cast<void*>(std::bit_cast<std::uintptr_t>(value));
 }
 
+// The frame fields handleFrame() reads, named like the SDK so both callback flavours map 1:1:
+// GX_FRAME_DATA_EX (SDK >= 2.5, PC) and GX_FRAME_CALLBACK_PARAM (ARM SDK 2.4).
+struct RawFrame {
+    GX_FRAME_STATUS nStatus;
+    std::int32_t nPixelFormat;
+    std::int32_t nWidth;
+    std::int32_t nHeight;
+    std::int32_t nImgSize;
+    const void* pImgBuf;
+    std::uint64_t nFrameID;
+    std::uint64_t nTimestamp;
+};
+
 // --- Camera -----------------------------------------------------------------------------
 
 class DahengCamera final : public ICamera {
@@ -347,7 +360,6 @@ public:
     // Not safe while streaming (the grab thread reads it).
     void setFrameCallback(FrameCallback callback) override { callback_ = std::move(callback); }
 
-
     // Not safe while streaming (events come from the SDK's threads).
     void setEventCallback(CameraEventCallback callback) override {
         eventCallback_ = std::move(callback);
@@ -376,10 +388,16 @@ public:
 
         pool_ = std::move(*pool);
         dropped_ = 0;
-        if (const GX_STATUS st = GXRegisterCaptureCallbackEx(handle_, this, &onFrame);
-            st != GX_STATUS_SUCCESS) {
+#if VSORT_GALAXY_HAS_CALLBACK_EX
+        const GX_STATUS registered = GXRegisterCaptureCallbackEx(handle_, this, &onFrame);
+        constexpr const char* kRegisterCall = "GXRegisterCaptureCallbackEx";
+#else
+        const GX_STATUS registered = GXRegisterCaptureCallback(handle_, this, &onFrame);
+        constexpr const char* kRegisterCall = "GXRegisterCaptureCallback";
+#endif
+        if (registered != GX_STATUS_SUCCESS) {
             pool_.reset();
-            return fail(st, "GXRegisterCaptureCallbackEx");
+            return fail(registered, kRegisterCall);
         }
         streaming_ = true; // before StreamOn so the first frame is not discarded
         if (const GX_STATUS st = GXStreamOn(handle_); st != GX_STATUS_SUCCESS) {
@@ -529,8 +547,8 @@ private:
 
     // Device offline notification (P20.50). Without it, a lost camera goes unnoticed.
     void registerOffline() {
-        if (const GX_STATUS st = GXRegisterDeviceOfflineCallback(handle_, this, &onOffline,
-                                                                 &offlineHandle_);
+        if (const GX_STATUS st =
+                GXRegisterDeviceOfflineCallback(handle_, this, &onOffline, &offlineHandle_);
             st != GX_STATUS_SUCCESS) {
             offlineHandle_ = nullptr;
             warn(info_.serial + ": offline callback not registered, SDK status " +
@@ -555,7 +573,7 @@ private:
     }
 
     // Runs on the SDK's grab thread.
-    void handleFrame(const GX_FRAME_DATA_EX& f) noexcept {
+    void handleFrame(const RawFrame& f) noexcept {
         const Timestamp arrival = Timestamp::now();
         inFlight_.fetch_add(1);
         const struct Release {
@@ -614,14 +632,31 @@ private:
         }
     }
 
+#if VSORT_GALAXY_HAS_CALLBACK_EX
     static void GX_STDC onFrame(GX_FRAME_DATA_EX* frame) {
+#else
+    static void GX_STDC onFrame(GX_FRAME_CALLBACK_PARAM* frame) {
+#endif
         if (frame == nullptr) {
             return;
         }
         auto* self = static_cast<DahengCamera*>(toPointer(frame->pUserParam));
-        if (self != nullptr) {
-            self->handleFrame(*frame);
+        if (self == nullptr) {
+            return;
         }
+#if VSORT_GALAXY_HAS_CALLBACK_EX
+        const GX_FRAME_STATUS status = frame->nStatus;
+#else
+        const GX_FRAME_STATUS status = frame->status;
+#endif
+        self->handleFrame(RawFrame{.nStatus = status,
+                                   .nPixelFormat = frame->nPixelFormat,
+                                   .nWidth = frame->nWidth,
+                                   .nHeight = frame->nHeight,
+                                   .nImgSize = frame->nImgSize,
+                                   .pImgBuf = toPointer(frame->pImgBuf),
+                                   .nFrameID = frame->nFrameID,
+                                   .nTimestamp = frame->nTimestamp});
     }
 
     static void GX_STDC onOffline(void* user) {

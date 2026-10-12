@@ -160,6 +160,30 @@ TEST(AnalysisConfig, RejectsBadHsvAndDuplicateSensors) {
     EXPECT_FALSE(analysisConfigFromJson(j).has_value());
 }
 
+TEST(AnalysisConfig, MissingEdgeSmoothingUsesDefaultAndIsWrittenBack) {
+    auto j = analysisDefaults();
+    j["defaults"].erase("edge_smooth_sigma_px");
+    const auto c = analysisConfigFromJson(j);
+    ASSERT_TRUE(c.has_value()) << c.error().what();
+    EXPECT_DOUBLE_EQ(c->defaults.edgeSmoothSigmaPx, AnalysisParams{}.edgeSmoothSigmaPx);
+
+    const auto dir = std::filesystem::temp_directory_path() / "vsort_analysis_migration_test";
+    std::filesystem::remove_all(dir);
+    {
+        MessageBus bus;
+        FileConfigStore store{dir, bus};
+        ASSERT_TRUE(registerAnalysisConfig(store).has_value());
+        ASSERT_TRUE(store.set(kAnalysisModule, j, "test").has_value()); // old file, key missing
+    }
+    MessageBus bus;
+    FileConfigStore store{dir, bus};
+    ASSERT_TRUE(registerAnalysisConfig(store).has_value());
+    const auto stored = store.get(kAnalysisModule);
+    ASSERT_TRUE(stored.has_value());
+    EXPECT_TRUE(stored->at("defaults").contains("edge_smooth_sigma_px"));
+    std::filesystem::remove_all(dir);
+}
+
 TEST(AnalysisRegion, GrowsClampsAndAligns) {
     const camera::Roi lane{.x = 100, .y = 10, .width = 200, .height = 100};
     const auto r =

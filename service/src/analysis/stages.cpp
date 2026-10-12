@@ -149,11 +149,10 @@ Result<> ColorSegmentationStage::process(AnalysisContext& ctx) const {
         }
     }
 
-    // Round off the per-pixel boundary: blur, then re-threshold (port of eqraftvision _smooth_mask).
-    // Trims spurs and fills notches symmetrically; opening alone only trims spurs.
-    constexpr double kEdgeSmoothSigmaPx = 4.0;
-    if (kEdgeSmoothSigmaPx > 0.0) {
-        cv::GaussianBlur(ctx.mask, ctx.mask, cv::Size{}, kEdgeSmoothSigmaPx);
+    // Round off the per-pixel boundary: blur, then re-threshold (port of eqraftvision
+    // _smooth_mask). Trims spurs and fills notches symmetrically; opening alone only trims spurs.
+    if (p.edgeSmoothSigmaPx > 0.0) {
+        cv::GaussianBlur(ctx.mask, ctx.mask, cv::Size{}, p.edgeSmoothSigmaPx);
         cv::threshold(ctx.mask, ctx.mask, 127.0, 255.0, cv::THRESH_BINARY);
     }
 
