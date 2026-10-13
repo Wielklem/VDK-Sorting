@@ -1,5 +1,6 @@
 #include "fake_service.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <string_view>
 #include <utility>
@@ -175,6 +176,44 @@ void FakeService::handleCommand(zmq::message_t& identity,
         const auto rep = fb::CreateCupSnapshotReply(fbb, fbb.CreateVector(lanes));
         reply = ipc::finishEnvelope(fbb, fields, fb::Payload::CupSnapshotReply, rep.Union());
     }
+    if (in.payload_type() == fb::Payload::StartCaptureRequest) {
+        const auto* req = in.payload_as_StartCaptureRequest();
+        ++captureStarts_;
+        lastCapture_ = CaptureStart{.folder = req->folder() != nullptr ? req->folder()->str() : "",
+                                    .photos = req->photos_per_sensor(),
+                                    .mode = static_cast<int>(req->mode()),
+                                    .minMm = req->min_mm(),
+                                    .maxMm = req->max_mm(),
+                                    .sensorIds = {}};
+        if (req->sensor_ids() != nullptr) {
+            lastCapture_.sensorIds.assign(req->sensor_ids()->begin(), req->sensor_ids()->end());
+        }
+        if (!captureStartError_.empty()) {
+            fields.status = 1;
+            fields.errorText = captureStartError_;
+            reply = ipc::finishEnvelope(fbb, fields, fb::Payload::NONE, {});
+        } else {
+            captureState_ = fb::CaptureState::Running;
+            captureSession_ = lastCapture_.folder + "/20260101T000000";
+            for (CaptureSensor& s : captureSensors_) {
+                s.selected =
+                    std::ranges::find(lastCapture_.sensorIds, s.id) != lastCapture_.sensorIds.end();
+                s.saved = 0;
+                s.target = s.selected ? lastCapture_.photos : 0U;
+            }
+            reply = captureReply(fbb, fields);
+        }
+    }
+    if (in.payload_type() == fb::Payload::StopCaptureRequest) {
+        ++captureStops_;
+        if (captureState_ == fb::CaptureState::Running) {
+            captureState_ = fb::CaptureState::Stopped;
+        }
+        reply = captureReply(fbb, fields);
+    }
+    if (in.payload_type() == fb::Payload::GetCaptureStatusRequest) {
+        reply = captureReply(fbb, fields);
+    }
     if (reply.empty()) {
         fbb.Clear();
         fields.status = 1;
@@ -183,6 +222,40 @@ void FakeService::handleCommand(zmq::message_t& identity,
     }
     (void)router_.send(std::move(identity), zmq::send_flags::sndmore);
     (void)router_.send(zmq::buffer(reply), zmq::send_flags::none);
+}
+
+void FakeService::setCaptureSensors(std::vector<std::pair<std::uint16_t, std::uint16_t>> sensors) {
+    captureSensors_.clear();
+    for (const auto& [id, camera] : sensors) {
+        captureSensors_.push_back({.id = id, .camera = camera});
+    }
+}
+
+void FakeService::setCaptureSaved(std::uint16_t sensorId, std::uint32_t saved) {
+    for (CaptureSensor& s : captureSensors_) {
+        if (s.id == sensorId) {
+            s.saved = saved;
+        }
+    }
+    const bool done = std::ranges::all_of(
+        captureSensors_, [](const CaptureSensor& s) { return !s.selected || s.saved >= s.target; });
+    if (captureState_ == fb::CaptureState::Running && done) {
+        captureState_ = fb::CaptureState::Done;
+    }
+}
+
+std::vector<std::uint8_t> FakeService::captureReply(flatbuffers::FlatBufferBuilder& fbb,
+                                                    const ipc::EnvelopeFields& fields) const {
+    std::vector<flatbuffers::Offset<fb::CaptureSensor>> sensors;
+    for (const CaptureSensor& s : captureSensors_) {
+        sensors.push_back(
+            fb::CreateCaptureSensor(fbb, s.id, s.camera, s.selected, s.saved, s.target));
+    }
+    const auto reply =
+        fb::CreateCaptureStatusReply(fbb, captureState_, fbb.CreateString(captureSession_),
+                                     fbb.CreateString(captureDefaultFolder_),
+                                     fbb.CreateString(std::string{}), fbb.CreateVector(sensors));
+    return ipc::finishEnvelope(fbb, fields, fb::Payload::CaptureStatusReply, reply.Union());
 }
 
 std::vector<std::uint8_t> FakeService::configReply(flatbuffers::FlatBufferBuilder& fbb,

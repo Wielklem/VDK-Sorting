@@ -16,6 +16,7 @@
 
 #include "live/analysis_overlay_data.hpp"
 #include "live/camera_info.hpp"
+#include "live/capture_data.hpp"
 #include "live/cup_data.hpp"
 
 namespace vsort::hmi {
@@ -53,6 +54,11 @@ public:
     void setConfig(const QString& module, const QByteArray& json);
     // Product Monitor (P80.100): last cups per lane; laneId 0 = all lanes.
     void requestCupSnapshot(quint16 laneId = 0);
+    // Photo capture (P60.100). All three are answered with captureStatusReceived(); errors
+    // arrive as commandFailed().
+    void startCapture(const CaptureStartData& request);
+    void stopCapture();
+    void requestCaptureStatus();
 
 signals:
     void connectedChanged(bool connected);
@@ -67,6 +73,7 @@ signals:
     void cupUpdateReceived(const vsort::hmi::LaneCupsData& update);
     void cameraRatesReceived(const QVector<vsort::hmi::CameraRateData>& rates);
     void analysisOverlayReceived(const vsort::hmi::AnalysisOverlayData& overlay); // P60.90
+    void captureStatusReceived(const vsort::hmi::CaptureStatusData& status);      // P60.100
 
 private:
     void poll();
