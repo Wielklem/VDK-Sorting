@@ -40,9 +40,11 @@ Envelope (every command and event):
 | GetConfig / SetConfig | config store access (JSON string, ConfigVersion) | G20, G30.20 |
 | StartBatch / StopBatch | later phases | P80 |
 | GetCupSnapshot | last cups of one lane (or all, lane_id 0) with seq and depth | G140.10 (P80.100) |
+| StartCapture / StopCapture / GetCaptureStatus | photo capture: folder, photos per sensor, filter, sensors; the reply is always the status (state, session folder, per sensor saved and target) | G150.10 (P60.100) |
 
 - Freeze/unfreeze is HMI-local (stop reading the ring). No command needed.
 - Commands are idempotent where possible.
+- Hello capabilities: `cups` (cup snapshots) and `capture` (photo capture; absent when the analysis is not running).
 
 ## 4. Events (PUB/SUB)
 Topic prefix (first frame) for SUB filtering: `hb`, `cfg`, `diag`, `preview`, `cam`, `cups`.

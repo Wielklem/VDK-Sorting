@@ -16,6 +16,7 @@
 
 #include "live/analysis_tuning_model.hpp"
 #include "live/camera_settings_model.hpp"
+#include "live/capture_model.hpp"
 #include "live/detector_model.hpp"
 #include "live/live_view_model.hpp"
 #include "live/product_monitor_model.hpp"
@@ -74,6 +75,8 @@ int main(int argc, char* argv[]) {
     vsort::hmi::RoiEditorModel roiOverlay{serviceClient};
     // NOLINTNEXTLINE(misc-const-correctness): QML calls non-const invokables
     vsort::hmi::DetectorModel detector{serviceClient};
+    // NOLINTNEXTLINE(misc-const-correctness): QML calls non-const invokables
+    vsort::hmi::CaptureModel captureModel{serviceClient};
     if (!gallery) {
         const auto loaded = vsort::hmi::loadPagePlugins(vsort::hmi::defaultPluginDir(), registry);
         for (const auto& error : loaded.errors) {
@@ -94,6 +97,7 @@ int main(int argc, char* argv[]) {
         engine.rootContext()->setContextProperty(QStringLiteral("analysisTuning"), &analysisTuning);
         engine.rootContext()->setContextProperty(QStringLiteral("roiOverlay"), &roiOverlay);
         engine.rootContext()->setContextProperty(QStringLiteral("detectorModel"), &detector);
+        engine.rootContext()->setContextProperty(QStringLiteral("captureModel"), &captureModel);
         serviceClient.start();
     } else if (selfTest) {
         engine.setInitialProperties({{QStringLiteral("selfTest"), true}});

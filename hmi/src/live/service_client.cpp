@@ -93,6 +93,24 @@ QVector<CupRowData> toCups(const flatbuffers::Vector<flatbuffers::Offset<fb::Cup
     return out;
 }
 
+CaptureStatusData toCaptureStatus(const fb::CaptureStatusReply& reply) {
+    CaptureStatusData out;
+    out.state = static_cast<CaptureStateData>(static_cast<int>(reply.state()));
+    out.sessionFolder = toQString(reply.session_folder());
+    out.defaultFolder = toQString(reply.default_folder());
+    out.errorText = toQString(reply.error_text());
+    if (const auto* sensors = reply.sensors(); sensors != nullptr) {
+        for (const auto* s : *sensors) {
+            out.sensors.push_back({.sensorId = s->sensor_id(),
+                                   .cameraId = s->camera_id(),
+                                   .selected = s->selected(),
+                                   .saved = s->saved(),
+                                   .target = s->target()});
+        }
+    }
+    return out;
+}
+
 std::string endpoint(const QString& host, quint16 port) {
     return "tcp://" + host.toStdString() + ":" + std::to_string(port);
 }
@@ -178,6 +196,30 @@ void ServiceClient::requestCupSnapshot(quint16 laneId) {
     const auto request = fb::CreateGetCupSnapshotRequest(fbb, laneId);
     sendRequest(fb::MsgType::GetCupSnapshot, fb::Payload::GetCupSnapshotRequest, fbb,
                 request.Union());
+}
+
+void ServiceClient::startCapture(const CaptureStartData& request) {
+    flatbuffers::FlatBufferBuilder fbb{256};
+    const auto folder = fbb.CreateString(request.folder.toStdString()); // UTF-8
+    const std::vector<std::uint16_t> ids(request.sensorIds.begin(), request.sensorIds.end());
+    const auto sensors = fbb.CreateVector(ids);
+    const auto req = fb::CreateStartCaptureRequest(fbb, folder, request.photosPerSensor,
+                                                   static_cast<fb::CaptureMode>(request.mode),
+                                                   request.minMm, request.maxMm, sensors);
+    sendRequest(fb::MsgType::StartCapture, fb::Payload::StartCaptureRequest, fbb, req.Union());
+}
+
+void ServiceClient::stopCapture() {
+    flatbuffers::FlatBufferBuilder fbb{64};
+    const auto req = fb::CreateStopCaptureRequest(fbb);
+    sendRequest(fb::MsgType::StopCapture, fb::Payload::StopCaptureRequest, fbb, req.Union());
+}
+
+void ServiceClient::requestCaptureStatus() {
+    flatbuffers::FlatBufferBuilder fbb{64};
+    const auto req = fb::CreateGetCaptureStatusRequest(fbb);
+    sendRequest(fb::MsgType::GetCaptureStatus, fb::Payload::GetCaptureStatusRequest, fbb,
+                req.Union());
 }
 
 void ServiceClient::sendRequest(fb::MsgType type, fb::Payload payloadType,
@@ -358,6 +400,9 @@ void ServiceClient::handleMessage(std::span<const std::uint8_t> bytes) {
         emit analysisOverlayReceived(overlay);
         break;
     }
+    case fb::Payload::CaptureStatusReply:
+        emit captureStatusReceived(toCaptureStatus(*envelope.payload_as_CaptureStatusReply()));
+        break;
     default:
         break; // not needed by the live view
     }

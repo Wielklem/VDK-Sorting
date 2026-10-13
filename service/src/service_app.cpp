@@ -14,9 +14,9 @@
 #include <vsort/camera/camera_settings_config.hpp>
 #include <vsort/common/config_store.hpp>
 #include <vsort/common/logging.hpp>
+#include <vsort/common/machine_config.hpp>
 #include <vsort/common/message_bus.hpp>
 #include <vsort/common/module_registry.hpp>
-#include <vsort/common/machine_config.hpp>
 #include <vsort/common/roi_config.hpp>
 #include <vsort/common/version.hpp>
 #include <vsort/platform/paths.hpp>
@@ -26,6 +26,7 @@
 #include "camera/camera_manager.hpp"
 #include "camera/camera_module.hpp"
 #include "camera/replay_backend.hpp"
+#include "capture/capture_module.hpp"
 #include "cups/cup_monitor.hpp"
 #include "ipc/ipc_server.hpp"
 #include "tracking/tracking_config.hpp"
@@ -254,6 +255,24 @@ int runService(const Options& options, platform::IServiceHost& host) {
         }
         cameras->addFrameSink(
             [analysisModule](const camera::Frame& frame) { analysisModule->submit(frame); });
+        // Photo capture (P60.100): needs the analysis results, so only with analysis enabled.
+        const auto analysisSettings = loadAnalysisConfig(configStore);
+        const auto machine = loadMachineConfig(configStore);
+        if (analysisSettings && analysisSettings->enabled && machine) {
+            auto capture = std::make_unique<CaptureModule>(
+                captureSensors(*machine),
+                CaptureOptions{.defaultFolder = paths->dataDir() / "captures"});
+            CaptureModule* captureModule = capture.get();
+            analysisModule->setCaptureSink(captureModule);
+            static_cast<IpcServer*>(registry.find("ipc"))->setCaptureControl(captureModule);
+            if (const auto added = registry.add(std::move(capture)); !added) {
+                spdlog::critical("cannot add capture module: {}", added.error().what());
+                log::shutdown();
+                return kExitFailure;
+            }
+        } else {
+            spdlog::info("capture: not available (analysis is disabled)");
+        }
     }
     if (const auto started = registry.startAll(context); !started) {
         spdlog::critical("module start failed: {}", started.error().what());

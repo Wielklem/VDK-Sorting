@@ -29,7 +29,9 @@ add_library(vsort_service_core STATIC
   src/analysis/overlay.cpp
   src/analysis/pipeline.cpp
   src/analysis/result_join.cpp
-  src/analysis/stages.cpp)
+  src/analysis/stages.cpp
+  src/capture/capture_module.cpp
+  src/capture/capture_types.cpp)
 target_include_directories(vsort_service_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(vsort_service_core
   PUBLIC vsort::common vsort::platform vsort::ipc vsort::camera vsort::replay

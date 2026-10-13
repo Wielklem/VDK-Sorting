@@ -5,6 +5,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <zmq.hpp>
@@ -53,6 +54,26 @@ public:
     // P60.90: one AnalysisOverlayEvent, like the analysis module sends per analysed frame.
     void publishAnalysisOverlay(const AnalysisOverlayData& overlay);
 
+    // Photo capture (P60.100): a stand-in for the capture control of the service.
+    struct CaptureStart {
+        std::string folder;
+        std::uint32_t photos{0};
+        int mode{0}; // CaptureMode of the schema
+        double minMm{0.0};
+        double maxMm{0.0};
+        std::vector<std::uint16_t> sensorIds;
+    };
+    // (sensor id, camera id), in the order the service lists them.
+    void setCaptureSensors(std::vector<std::pair<std::uint16_t, std::uint16_t>> sensors);
+    void setCaptureDefaultFolder(std::string folder) { captureDefaultFolder_ = std::move(folder); }
+    // The next StartCapture is answered with this error (empty = no error).
+    void setCaptureStartError(std::string text) { captureStartError_ = std::move(text); }
+    // Progress of the running capture; Done when every selected sensor reached its target.
+    void setCaptureSaved(std::uint16_t sensorId, std::uint32_t saved);
+    [[nodiscard]] int captureStarts() const noexcept { return captureStarts_; }
+    [[nodiscard]] int captureStops() const noexcept { return captureStops_; }
+    [[nodiscard]] const CaptureStart& lastCaptureStart() const noexcept { return lastCapture_; }
+
     [[nodiscard]] int cameraListRequests() const noexcept { return cameraListRequests_; }
     [[nodiscard]] int setPreviewRequests() const noexcept { return setPreviewRequests_; }
     // Exposure the fake camera currently has (changed by SetCameraSettings).
@@ -76,6 +97,8 @@ private:
     };
 
     void handleCommand(zmq::message_t& identity, const std::vector<std::uint8_t>& request);
+    [[nodiscard]] std::vector<std::uint8_t> captureReply(flatbuffers::FlatBufferBuilder& fbb,
+                                                         const ipc::EnvelopeFields& fields) const;
     void publishHeartbeat();
     [[nodiscard]] std::vector<std::uint8_t> configReply(flatbuffers::FlatBufferBuilder& fbb,
                                                         const ipc::EnvelopeFields& fields,
@@ -99,6 +122,22 @@ private:
     std::uint32_t configVersion_{1};
     std::vector<LaneCupsData> cupLanes_;
     int cupSnapshotRequests_{0};
+
+    struct CaptureSensor {
+        std::uint16_t id{0};
+        std::uint16_t camera{0};
+        bool selected{false};
+        std::uint32_t saved{0};
+        std::uint32_t target{0};
+    };
+    std::vector<CaptureSensor> captureSensors_;
+    ipc::fb::CaptureState captureState_{ipc::fb::CaptureState::Idle};
+    std::string captureSession_;
+    std::string captureDefaultFolder_;
+    std::string captureStartError_;
+    CaptureStart lastCapture_;
+    int captureStarts_{0};
+    int captureStops_{0};
 };
 
 } // namespace vsort::hmi::test

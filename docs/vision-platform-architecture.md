@@ -72,7 +72,7 @@ flowchart LR
   end
   subgraph PC[Vision PC]
     SVC[Vision service M10–M90, M110–M130]
-    HMI[HMI M100, pages G20–G130]
+    HMI[HMI M100, pages G20–G150]
   end
   ENC --> FW
   FW -- trigger --> CAM
@@ -142,6 +142,7 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | M60.10 | Basic stages | Preprocess, segmentation, size, dirt % | stage | [V1] |
 | M60.20 | Extended stages | Cracks, shape, colour, shell defects | stage | [LATER] |
 | M60.30 | ML stages | Model inference (ONNX/TensorRT) | stage | [PARTIAL] |
+| M60.40 | Photo capture | Saves photos of lane ROIs, with the analysis result in the file name, to a folder to review the analysis | `ICaptureSink`, `ICaptureControl` | [V1] |
 | M70 | Grading | Sorting specs, rules, grades, decision per object | `IGradingRule` | [V1] (shadow) |
 | M70.20 | Grade → outlet mapping | Which grade goes to which tipper/outlet | — | [LATER] |
 | M75 | Eject planning | Decision → `{tipper, eject_at_count, pulse}`; deadline check | — | [LATER] |
@@ -169,6 +170,7 @@ In V1 the controller block is the external PLC with **no link** to the PC. Only 
 | MSG-50-02 | CupUpdate: the changed cups of one lane (cup ID, per sensor Pending/Ok/NoData + measurements) with seq; GetCupSnapshot gives the last 50 cups per lane (section 40.50) | [V1] |
 | MSG-60-01 | Measurement | [V1] |
 | MSG-60-02 | AnalysisOverlay: objects found per frame and sensor (contours, counted, size), topic `ana` | [V1] |
+| MSG-60-10 | StartCapture / StopCapture / GetCaptureStatus (commands, msg types 6010–6012), answered with CaptureStatusReply: state, folders, per sensor saved and target (section 40.65) | [V1] |
 | MSG-70-01 | Decision | [V1] |
 | MSG-75-01 | EjectCommand | [LATER] |
 | MSG-90-01 | DiagEvent | [V1] |
@@ -342,6 +344,30 @@ V1 shortcuts (compared to the final implementation):
 - **Fixed stage list** until the recipe (P60.20).
 - **Last value only.** The cup table keeps the measurements of the last 50 cups; history comes with the results database (P80.10).
 - **No production statistics** (own branch with a dashboard later).
+
+### 40.65 Photo capture (M60.40, G150.10, P60.100)
+
+Saves photos of the lane ROIs to a folder, to review how the analysis judged them (are the "empty" cups really empty?). It is not the raw recording for replay (M30.30).
+
+Service (`service/src/capture/`, module `capture`, depends on `analysis`):
+- **Hook.** For every analysed lane photo the analysis worker asks `ICaptureSink::reserve(sensor, values)`. Only when a running capture wants that photo does the worker build the images (`commit`); otherwise nothing is copied. A bounded queue (32 photos) and a writer thread do the JPEG encoding and the disk writes, so the analysis never waits for the disk.
+- **Selection.** Per sensor on or off, and `photos_per_sensor` (1…100000, default 50). Filter on the result of that photo: no potato (`count` = 0), single (`count` = 1), multiple (`count` ≥ 2) or size range (`count` ≥ 1 and `length_mm` of the largest object within min…max).
+- **Output.** `<folder>/<YYYYMMDDTHHMMSS>/sensor_<id>/<nnnn>_<empty|single|multi>_n<count>[_<length>mm]_f<frame ID>.jpg`: the lane ROI plus detection buffer without drawings, and the same name with `_overlay` (mask, objects, sizes). JPEG quality 95. `captures.csv` in the session folder has one line per photo (sensor, camera, number, frame ID, verdict, count, length, width, area, files). Every start creates a new session folder. The folder is on the PC that runs the service.
+- **States.** Idle, Running, Done (every selected sensor reached its number), Stopped (photos already queued are still written), Failed (a file cannot be written). A start is refused when the folder cannot be created or has less than 500 MB free.
+- **IPC.** StartCapture / StopCapture / GetCaptureStatus (MSG-60-10), all answered with CaptureStatusReply: state, session folder, default folder (`<data dir>/captures`), error text, and per sensor camera, selected, saved and target. Hello lists the capability `capture`. Without analysis (disabled, or no cameras) the commands answer NotSupported.
+
+HMI (page plugin `hmi/pages/capture`, pageId G150, order 150; model `CaptureModel` in `hmi/src/live`, QML context property `captureModel`):
+- **Page.** Left: photos per sensor, mode (no potatoes, single, multiple, size range with min and max in mm), folder (text field and Browse), Start / Stop, status line, session folder. Right: the sensors grouped per camera, on/off per sensor and per camera, All / None, progress "saved / target".
+- **Sync.** The sensor list and the proposed folder come from GetCaptureStatus when the page opens. While a capture runs the settings are locked and the model asks for the status every second.
+- **Tests.** Service: filter, module (files, quota, stop, errors), command handler and the analysis hook (`vsort_service_tests`). HMI: model tests against FakeService (`vsort_hmi_live_tests`, also on Windows).
+
+V1 shortcuts (compared to the final implementation):
+- **Not remembered.** The HMI settings (number, mode, sizes, sensors, folder) are lost when the HMI closes.
+- **Polling.** The status is polled while a capture runs; there is no capture event.
+- **Free space** is checked at the start only.
+- **Skipped photos.** Frames the analysis drops (its queue is full) are not evaluated, and a photo is skipped when the writer queue is full.
+- **Largest object.** The size filter looks at the largest object of the photo only.
+- **Folder on the service PC.** The HMI cannot browse another PC; Browse needs the Qt Quick Dialogs module (without it the folder is typed).
 ---
 
 
@@ -387,6 +413,7 @@ Each page is a QML plugin with tabs. Visibility depends on controller capabiliti
 | **G120 Timing & calibration** | G120.10 Encoder ↔ photo [LATER] · G120.20 Encoder ↔ roller ↔ tipper [LATER] · G120.30 Tipper test/jog [LATER] | [LATER] |
 | **G130 Machine state** | G130.10 Run/stop/fault [PARTIAL] · G130.20 Safe-state policy [LATER] | [PARTIAL] |
 | **G140 Product monitor** | G140.10 Live cup table per lane [V1] [DONE P80.110] (lane dropdown, last 50 cups, newest on top, columns from Sensor config, red "no data" cells, freeze / back-to-live button bottom corner) · G140.20 Offset calibration [V1] (step one cup through an empty machine, read the offset per sensor) | [V1] |
+| **G150 Photo capture** | G150.10 Capture [V1] (photos per sensor, which photos: no potato / single / multiple / size range, sensors and cameras on or off, folder, progress; section 40.65) | [V1] |
 
 ---
 
@@ -533,6 +560,7 @@ Task IDs follow the numbering rule (steps of 10, e.g. P10.10, P10.20) so tasks c
 - **P60.80** Add multi-photo aggregation: combine measurements per object (max, mean, worst-case rules).
 - **P60.90 [PARTIALLY_DONE]** Build the G60 pages: stage list, parameters with live preview, debug overlay per stage. Done: page "Analytics" with side tabs "Contour (HSV)" and "Detector" (G60.30): the objects the service found in the shown frame (MSG-60-02, matched by frame ID; counted = white outline with size, neighbour = dimmed), ROIs on/off, Freeze, and the detector parameters (mask clean-up, object filter, detection buffer, scale), saved per camera and applied from the next frame. Open: stage list, debug picture per stage.
 - **P60.95** Build the ONNX Runtime stage skeleton for future ML models. [PARTIAL]
+- **P60.100 [DONE]** Photo capture to review the analysis: service module `capture` (hook in the analysis, writer thread, three IPC commands) and page G150 (section 40.65).
 
 **Done when:** measurements appear per object, stages can be swapped, and latency is within budget.
 

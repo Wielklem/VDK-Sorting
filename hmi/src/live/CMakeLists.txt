@@ -9,7 +9,8 @@ add_library(vsort_hmi_live STATIC
   camera_settings_model.cpp
   product_monitor_model.cpp
   analysis_tuning_model.cpp
-  detector_model.cpp)
+  detector_model.cpp
+  capture_model.cpp)
 target_include_directories(vsort_hmi_live PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(vsort_hmi_live PUBLIC Qt6::Core vsort_hmi_video vsort::common vsort::ipc)
 if(TARGET cppzmq-static)
