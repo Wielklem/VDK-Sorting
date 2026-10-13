@@ -9,6 +9,7 @@
 #include <vsort/common/timestamp.hpp>
 #include <vsort/ipc/envelope.hpp>
 
+#include "capture/capture_control.hpp"
 #include "cups/cup_types.hpp"
 #include "ipc/camera_access.hpp"
 #include "ipc/preview_hub.hpp"
@@ -33,6 +34,10 @@ public:
     // Set before the IPC thread starts; `source` must outlive the handler.
     void setCupSource(const ICupSource* source) noexcept { cups_ = source; }
 
+    // Photo capture (P60.100). Null: the capture commands answer NotSupported.
+    // Set before the IPC thread starts; `control` must outlive the handler.
+    void setCaptureControl(ICaptureControl* control) noexcept { capture_ = control; }
+
 private:
     struct Reply {
         ipc::fb::Payload type{ipc::fb::Payload::NONE};
@@ -56,6 +61,10 @@ private:
                                             const ipc::fb::SetConfigRequest& req) const;
     [[nodiscard]] Result<Reply> onGetCupSnapshot(flatbuffers::FlatBufferBuilder& fbb,
                                                  const ipc::fb::GetCupSnapshotRequest& req) const;
+    [[nodiscard]] Result<Reply> onStartCapture(flatbuffers::FlatBufferBuilder& fbb,
+                                               const ipc::fb::StartCaptureRequest& req) const;
+    [[nodiscard]] Result<Reply> onStopCapture(flatbuffers::FlatBufferBuilder& fbb) const;
+    [[nodiscard]] Result<Reply> onGetCaptureStatus(flatbuffers::FlatBufferBuilder& fbb) const;
 
     PreviewHub& hub_;
     ICameraAccess& cameras_;
@@ -63,6 +72,7 @@ private:
     std::string serviceVersion_;
     Timestamp started_;
     const ICupSource* cups_{nullptr};
+    ICaptureControl* capture_{nullptr};
 };
 
 } // namespace vsort::service

@@ -22,6 +22,7 @@
 #include "analysis/camera_rates.hpp"
 #include "analysis/pipeline.hpp"
 #include "analysis/result_join.hpp"
+#include "capture/capture_module.hpp"
 #include "ipc/overlay_messages.hpp"
 #include "test_ipc_util.hpp"
 
@@ -464,6 +465,43 @@ TEST_F(AnalysisModuleTest, SavedConfigIsAppliedWithoutRestart) {
     EXPECT_EQ(got->cupId, 2);
     EXPECT_EQ(value(got->values, kKeyCount), 0.0);
     EXPECT_EQ(value(got->values, kKeyPresent), 0.0);
+}
+
+TEST_F(AnalysisModuleTest, CapturesPhotosThatPassTheFilter) {
+    const auto machine = loadMachineConfig(*store);
+    ASSERT_TRUE(machine.has_value());
+    CaptureModule capture{captureSensors(*machine),
+                          {.defaultFolder = dir / "cap", .minFreeBytes = 0}};
+    AnalysisModule module{store.get()};
+    module.setCaptureSink(&capture);
+    ModuleContext context{bus};
+    ASSERT_TRUE(module.init(context).has_value());
+    ASSERT_TRUE(module.start().has_value());
+    const auto started = capture.startCapture({.folder = dir / "cap",
+                                               .photosPerSensor = 2,
+                                               .filter = {.mode = CaptureMode::NoPotato},
+                                               .sensorIds = {1}}); // sensor 1 = camera 0
+    ASSERT_TRUE(started.has_value()) << started.error().what();
+
+    const std::vector<Ellipse> egg{{.centre = {320, 240}, .halfAxes = {90, 60}}};
+    module.submit(ellipseFrame(0, 1, {})->frame);  // empty cup: saved
+    module.submit(ellipseFrame(0, 2, egg)->frame); // one egg: not wanted by the filter
+    module.submit(ellipseFrame(0, 3, {})->frame);  // empty cup: saved
+    for (int i = 0; i < 300 && capture.captureStatus().state != CaptureState::Done; ++i) {
+        std::this_thread::sleep_for(10ms);
+    }
+    module.stop();
+    const auto status = capture.stopCapture();
+    EXPECT_EQ(status.state, CaptureState::Done);
+    EXPECT_EQ(status.sensors[0].saved, 2U);
+
+    std::size_t photos = 0;
+    for (const auto& e : std::filesystem::directory_iterator{status.sessionFolder / "sensor_1"}) {
+        const auto name = e.path().filename().string();
+        EXPECT_NE(name.find("_empty_n0_"), std::string::npos) << name;
+        photos += name.find("_overlay") == std::string::npos ? 1U : 0U;
+    }
+    EXPECT_EQ(photos, 2U);
 }
 
 TEST(AnalysisOverlay, ObjectsInFramePixelsWithCountedFlag) {

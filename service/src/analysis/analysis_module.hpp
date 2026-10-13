@@ -24,6 +24,7 @@
 #include "analysis/camera_rates.hpp"
 #include "analysis/pipeline.hpp"
 #include "analysis/result_join.hpp"
+#include "capture/capture_sink.hpp"
 #include "tracking/frame_sequence_tracker.hpp"
 
 namespace vsort::service {
@@ -63,6 +64,10 @@ public:
     [[nodiscard]] Result<> start() override;
     void stop() noexcept override;
     [[nodiscard]] Health health() const override;
+
+    // Photo capture (P60.100): offered every analysed lane photo. Call before start(); `sink` must
+    // outlive the module.
+    void setCaptureSink(ICaptureSink* sink) noexcept { capture_ = sink; }
 
     // Frame sink: called on a camera grab thread, never blocks. Ignored unless running.
     void submit(const camera::Frame& frame) noexcept;
@@ -126,6 +131,8 @@ private:
     void analyse(Worker& worker, const camera::Frame& frame);
     void saveDebug(SensorRuntime& sensor, const camera::Frame& frame, const AnalysisContext& ctx,
                    std::uint32_t maxImages);
+    void offerCapture(const SensorRuntime& sensor, const camera::Frame& frame,
+                      const AnalysisContext& ctx);
     void reloadConfig(); // join thread
     static void logWindow(std::uint16_t cameraId, SensorRuntime& sensor);
     void runJoin(const std::stop_token& stop);
@@ -135,6 +142,7 @@ private:
     AnalysisOptions options_;
     AnalysisConfig analysisConfig_;
     MessageBus* bus_{nullptr};
+    ICaptureSink* capture_{nullptr};
     std::shared_ptr<Subscription<ObjectRecord>> records_;
     std::shared_ptr<Subscription<ConfigChanged>> configChanges_;
     mutable std::mutex configMutex_;

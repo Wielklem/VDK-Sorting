@@ -251,6 +251,9 @@ void AnalysisModule::analyse(Worker& worker, const camera::Frame& frame) {
         if (cfg.debugEveryN > 0 && !options_.debugDir.empty() && s.frames % cfg.debugEveryN == 0) {
             saveDebug(s, frame, ctx, cfg.debugMaxImages);
         }
+        if (capture_ != nullptr) {
+            offerCapture(s, frame, ctx);
+        }
         if (options_.publishOverlays) {
             bus_->publish(makeOverlay(ctx, region, lane, meta, s.sensor.sensorId));
         }
@@ -263,6 +266,33 @@ void AnalysisModule::analyse(Worker& worker, const camera::Frame& frame) {
     analysed_.fetch_add(1, std::memory_order_relaxed);
     if (allOk) {
         worker.analysedOk.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
+// P60.100: asks the capture whether it wants this photo; only then are the images made.
+void AnalysisModule::offerCapture(const SensorRuntime& sensor, const camera::Frame& frame,
+                                  const AnalysisContext& ctx) {
+    const auto sensorId = sensor.sensor.sensorId;
+    const CaptureValues values = makeCaptureValues(ctx.values);
+    const auto seq = capture_->reserve(sensorId, values);
+    if (!seq) {
+        return;
+    }
+    try {
+        cv::Mat overlay = drawOverlay(ctx);
+        if (ctx.bgr.empty() || overlay.empty()) {
+            capture_->cancel(sensorId);
+            return;
+        }
+        capture_->commit(CaptureImage{.sensorId = sensorId,
+                                      .cameraId = sensor.sensor.cameraId,
+                                      .seq = *seq,
+                                      .frameId = frame.meta.frameId.value(),
+                                      .values = values,
+                                      .photo = ctx.bgr.clone(),
+                                      .overlay = std::move(overlay)});
+    } catch (...) {
+        capture_->cancel(sensorId);
     }
 }
 

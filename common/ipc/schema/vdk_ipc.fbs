@@ -24,7 +24,10 @@ enum MsgType : uint16 {
   ObjectRecord = 5001,         // MSG-50-01 (not published yet)
   CupUpdate = 5002,            // MSG-50-02, topic "cups"
   GetCupSnapshot = 5010,
-  AnalysisOverlay = 6002       // MSG-60-02, topic "ana" (P60.90)
+  AnalysisOverlay = 6002,      // MSG-60-02, topic "ana" (P60.90)
+  StartCapture = 6010,         // P60.100
+  StopCapture = 6011,
+  GetCaptureStatus = 6012
 }
 
 table CameraSettings {
@@ -180,6 +183,38 @@ table AnalysisOverlayEvent {
   objects: [DetectedObject];
 }
 
+// ---- Photo capture (P60.100) ----
+enum CaptureMode : uint8 { NoPotato = 1, Single = 2, Multiple = 3, SizeRange = 4 }
+enum CaptureState : uint8 { Idle = 0, Running = 1, Done = 2, Stopped = 3, Failed = 4 }
+
+// Saves photos of lane ROIs to a folder on the service PC. Answered with CaptureStatusReply.
+table StartCaptureRequest {
+  folder: string;               // UTF-8, absolute; a session folder is created below it
+  photos_per_sensor: uint32;
+  mode: CaptureMode = NoPotato;
+  min_mm: double;               // SizeRange: length of the largest object
+  max_mm: double;
+  sensor_ids: [uint16];
+}
+table StopCaptureRequest {}
+table GetCaptureStatusRequest {}
+
+table CaptureSensor {
+  sensor_id: uint16;
+  camera_id: uint16;
+  selected: bool;     // part of the current or last session
+  saved: uint32;
+  target: uint32;
+}
+
+table CaptureStatusReply {
+  state: CaptureState = Idle;
+  session_folder: string;   // empty before the first start
+  default_folder: string;   // proposed by the service
+  error_text: string;       // state Failed
+  sensors: [CaptureSensor]; // every sensor of the machine
+}
+
 union Payload {
 
   HelloRequest, HelloReply,
@@ -192,7 +227,8 @@ union Payload {
   ObjectRecord,
   CupUpdateEvent, GetCupSnapshotRequest, CupSnapshotReply,
   CameraRatesEvent,
-  AnalysisOverlayEvent
+  AnalysisOverlayEvent,
+  StartCaptureRequest, StopCaptureRequest, GetCaptureStatusRequest, CaptureStatusReply
 
 }
 

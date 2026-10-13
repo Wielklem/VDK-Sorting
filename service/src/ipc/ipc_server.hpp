@@ -19,6 +19,7 @@
 
 #include "analysis/analysis_overlay.hpp"
 #include "analysis/camera_rates.hpp"
+#include "capture/capture_control.hpp"
 #include "cups/cup_types.hpp"
 #include "ipc/camera_access.hpp"
 #include "ipc/command_handler.hpp"
@@ -56,6 +57,11 @@ public:
 
     // Product Monitor (P80.100): snapshot requests go to `source`. Call before start().
     void setCupSource(const ICupSource* source) noexcept { handler_.setCupSource(source); }
+
+    // Photo capture (P60.100): start / stop / status requests go to `control`. Call before start().
+    void setCaptureControl(ICaptureControl* control) noexcept {
+        handler_.setCaptureControl(control);
+    }
 
 private:
     void run(const std::stop_token& stop);

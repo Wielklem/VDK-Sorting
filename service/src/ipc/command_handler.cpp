@@ -80,6 +80,20 @@ Result<camera::CameraSettings> fromFb(const fb::CameraSettings* in) {
     return out;
 }
 
+flatbuffers::Offset<fb::CaptureStatusReply> makeCaptureStatus(Fbb& fbb,
+                                                              const CaptureStatus& status) {
+    std::vector<flatbuffers::Offset<fb::CaptureSensor>> sensors;
+    sensors.reserve(status.sensors.size());
+    for (const auto& s : status.sensors) {
+        sensors.push_back(
+            fb::CreateCaptureSensor(fbb, s.sensorId, s.cameraId, s.selected, s.saved, s.target));
+    }
+    return fb::CreateCaptureStatusReply(
+        fbb, static_cast<fb::CaptureState>(static_cast<std::uint8_t>(status.state)),
+        str(fbb, toUtf8(status.sessionFolder)), str(fbb, toUtf8(status.defaultFolder)),
+        str(fbb, status.errorText), fbb.CreateVector(sensors));
+}
+
 std::optional<CameraListEntry> findCamera(const ICameraAccess& cameras, std::uint16_t id) {
     const auto all = cameras.list();
     const auto it = std::ranges::find(all, id, &CameraListEntry::id);
@@ -149,6 +163,12 @@ Result<CommandHandler::Reply> CommandHandler::dispatch(Fbb& fbb,
         return onSetConfig(fbb, *request.payload_as_SetConfigRequest());
     case fb::Payload::GetCupSnapshotRequest:
         return onGetCupSnapshot(fbb, *request.payload_as_GetCupSnapshotRequest());
+    case fb::Payload::StartCaptureRequest:
+        return onStartCapture(fbb, *request.payload_as_StartCaptureRequest());
+    case fb::Payload::StopCaptureRequest:
+        return onStopCapture(fbb);
+    case fb::Payload::GetCaptureStatusRequest:
+        return onGetCaptureStatus(fbb);
     default:
         return makeError(Errc::NotSupported, "unknown or unsupported command");
     }
@@ -159,6 +179,9 @@ Result<CommandHandler::Reply> CommandHandler::onHello(Fbb& fbb) const {
         str(fbb, "preview"), str(fbb, "camera_settings"), str(fbb, "config")};
     if (cups_ != nullptr) {
         caps.push_back(str(fbb, "cups"));
+    }
+    if (capture_ != nullptr) {
+        caps.push_back(str(fbb, "capture"));
     }
     const auto reply =
         fb::CreateHelloReply(fbb, str(fbb, serviceVersion_), fb::ServiceState::Running, uptimeMs(),
@@ -273,6 +296,52 @@ CommandHandler::onGetCupSnapshot(Fbb& fbb, const fb::GetCupSnapshotRequest& req)
     const auto laneId = req.lane_id() == 0 ? std::nullopt : std::optional{req.lane_id()};
     const auto reply = makeCupSnapshot(fbb, cups_->snapshot(laneId));
     return Reply{fb::Payload::CupSnapshotReply, reply.Union()};
+}
+
+Result<CommandHandler::Reply>
+CommandHandler::onStartCapture(Fbb& fbb, const fb::StartCaptureRequest& req) const {
+    if (capture_ == nullptr) {
+        return makeError(Errc::NotSupported, "photo capture is not available (analysis disabled?)");
+    }
+    CaptureRequest request;
+    request.folder = pathFromUtf8(view(req.folder()));
+    request.photosPerSensor = req.photos_per_sensor();
+    switch (req.mode()) {
+    case fb::CaptureMode::NoPotato:
+    case fb::CaptureMode::Single:
+    case fb::CaptureMode::Multiple:
+    case fb::CaptureMode::SizeRange:
+        request.filter.mode = static_cast<CaptureMode>(static_cast<std::uint8_t>(req.mode()));
+        break;
+    default:
+        return makeError(Errc::InvalidArgument, "unknown capture mode");
+    }
+    request.filter.minMm = req.min_mm();
+    request.filter.maxMm = req.max_mm();
+    if (const auto* ids = req.sensor_ids(); ids != nullptr) {
+        request.sensorIds.assign(ids->begin(), ids->end());
+    }
+    const auto status = capture_->startCapture(request);
+    if (!status) {
+        return std::unexpected{status.error()};
+    }
+    return Reply{fb::Payload::CaptureStatusReply, makeCaptureStatus(fbb, *status).Union()};
+}
+
+Result<CommandHandler::Reply> CommandHandler::onStopCapture(Fbb& fbb) const {
+    if (capture_ == nullptr) {
+        return makeError(Errc::NotSupported, "photo capture is not available (analysis disabled?)");
+    }
+    return Reply{fb::Payload::CaptureStatusReply,
+                 makeCaptureStatus(fbb, capture_->stopCapture()).Union()};
+}
+
+Result<CommandHandler::Reply> CommandHandler::onGetCaptureStatus(Fbb& fbb) const {
+    if (capture_ == nullptr) {
+        return makeError(Errc::NotSupported, "photo capture is not available (analysis disabled?)");
+    }
+    return Reply{fb::Payload::CaptureStatusReply,
+                 makeCaptureStatus(fbb, capture_->captureStatus()).Union()};
 }
 
 } // namespace vsort::service
