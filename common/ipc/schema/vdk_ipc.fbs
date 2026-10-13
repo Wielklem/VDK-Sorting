@@ -184,7 +184,7 @@ table AnalysisOverlayEvent {
 }
 
 // ---- Photo capture (P60.100) ----
-enum CaptureMode : uint8 { NoPotato = 1, Single = 2, Multiple = 3, SizeRange = 4 }
+enum CaptureMode : uint8 { NoPotato = 1, Single = 2, Multiple = 3, SizeRange = 4, All = 5 }
 enum CaptureState : uint8 { Idle = 0, Running = 1, Done = 2, Stopped = 3, Failed = 4 }
 
 // Saves photos of lane ROIs to a folder on the service PC. Answered with CaptureStatusReply.
@@ -205,6 +205,8 @@ table CaptureSensor {
   selected: bool;     // part of the current or last session
   saved: uint32;
   target: uint32;
+  name: string;       // sensor name from the config
+  lane_name: string;  // lane name from the config
 }
 
 table CaptureStatusReply {

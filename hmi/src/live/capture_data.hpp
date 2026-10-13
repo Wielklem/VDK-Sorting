@@ -16,6 +16,8 @@ struct CaptureSensorData {
     bool selected{false}; // part of the current or last session
     quint32 saved{0};
     quint32 target{0};
+    QString name;     // sensor name from the config
+    QString laneName; // lane name from the config
 };
 
 struct CaptureStatusData {

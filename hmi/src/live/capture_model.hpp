@@ -39,7 +39,9 @@ public:
         CameraSelectedRole, // every sensor of this row's camera is selected
         SavedRole,
         TargetRole,
-        FirstOfCameraRole // first row of its camera: the page shows the camera header here
+        FirstOfCameraRole, // first row of its camera: the page shows the camera header here
+        SensorNameRole,
+        LaneNameRole
     };
 
     static constexpr int kDefaultPhotos = 50;
@@ -94,6 +96,8 @@ private:
         bool selected{true};
         quint32 saved{0};
         quint32 target{0};
+        QString sensorName;
+        QString laneName;
     };
 
     void onStatus(const CaptureStatusData& status);

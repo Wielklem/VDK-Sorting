@@ -12,7 +12,7 @@ class CapturePage final : public QObject, public IPage {
 
 public:
     [[nodiscard]] QString pageId() const override { return QStringLiteral("G150"); }
-    [[nodiscard]] QString title() const override { return QStringLiteral("Photo Capture"); }
+    [[nodiscard]] QString title() const override { return QStringLiteral("Recording"); }
     [[nodiscard]] int order() const override { return 150; }
     [[nodiscard]] QUrl qmlSource() const override {
         return QUrl(QStringLiteral("qrc:/VsortPages/Capture/CapturePage.qml"));

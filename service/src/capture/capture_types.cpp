@@ -40,6 +40,8 @@ bool CaptureFilter::accepts(const CaptureValues& values) const noexcept {
     case CaptureMode::SizeRange:
         return values.count >= 1 && values.lengthMm && *values.lengthMm >= minMm &&
                *values.lengthMm <= maxMm;
+    case CaptureMode::All:
+        return true;
     }
     return false;
 }
@@ -49,6 +51,7 @@ Result<> CaptureFilter::validate() const {
     case CaptureMode::NoPotato:
     case CaptureMode::Single:
     case CaptureMode::Multiple:
+    case CaptureMode::All:
         return {};
     case CaptureMode::SizeRange:
         if (!std::isfinite(minMm) || !std::isfinite(maxMm) || minMm < 0.0 || minMm > maxMm) {

@@ -105,14 +105,6 @@ Rectangle {
                 spacing: Theme.spacing
 
                 Text {
-                    anchors.baseline: name.baseline
-                    text: item.pageId
-                    color: item.current ? Theme.textPrimary : Theme.textSecondary
-                    opacity: item.current ? 0.8 : 1
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.navIdSize
-                }
-                Text {
                     id: name
 
                     text: item.title

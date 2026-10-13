@@ -22,6 +22,7 @@ enum class CaptureMode : std::uint8_t {
     Single = 2,    // count == 1
     Multiple = 3,  // count >= 2
     SizeRange = 4, // count >= 1 and length of the largest object within [minMm, maxMm]
+    All = 5,       // every photo
 };
 
 // Values follow the IPC schema (CaptureState).
@@ -54,6 +55,8 @@ struct CaptureFilter {
 struct CaptureSensor {
     std::uint16_t sensorId{0};
     std::uint16_t cameraId{0};
+    std::string name{};
+    std::string laneName{};
 };
 
 struct CaptureRequest {
@@ -69,6 +72,8 @@ struct CaptureSensorStatus {
     bool selected{false}; // part of the current or last session
     std::uint32_t saved{0};
     std::uint32_t target{0};
+    std::string name{};
+    std::string laneName{};
 };
 
 struct CaptureStatus {
