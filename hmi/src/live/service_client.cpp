@@ -105,7 +105,9 @@ CaptureStatusData toCaptureStatus(const fb::CaptureStatusReply& reply) {
                                    .cameraId = s->camera_id(),
                                    .selected = s->selected(),
                                    .saved = s->saved(),
-                                   .target = s->target()});
+                                   .target = s->target(),
+                                   .name = toQString(s->name()),
+                                   .laneName = toQString(s->lane_name())});
         }
     }
     return out;

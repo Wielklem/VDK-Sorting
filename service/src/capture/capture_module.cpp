@@ -96,7 +96,10 @@ std::vector<CaptureSensor> captureSensors(const MachineConfig& machine) {
     std::vector<CaptureSensor> out;
     for (const auto* lane : machine.lanes()) {
         for (const auto& sensor : lane->sensors) {
-            out.push_back({.sensorId = sensor.id, .cameraId = sensor.cameraId});
+            out.push_back({.sensorId = sensor.id,
+                       .cameraId = sensor.cameraId,
+                       .name = sensor.name,
+                       .laneName = lane->name});
         }
     }
     return out;
@@ -152,7 +155,9 @@ CaptureStatus CaptureModule::statusLocked() const {
                                                      .cameraId = s.sensor.cameraId,
                                                      .selected = s.selected,
                                                      .saved = s.saved,
-                                                     .target = s.selected ? target_ : 0U});
+                                                     .target = s.selected ? target_ : 0U,
+                                                     .name = s.sensor.name,
+                                                     .laneName = s.sensor.laneName});
     }
     return status;
 }

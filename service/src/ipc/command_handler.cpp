@@ -86,7 +86,8 @@ flatbuffers::Offset<fb::CaptureStatusReply> makeCaptureStatus(Fbb& fbb,
     sensors.reserve(status.sensors.size());
     for (const auto& s : status.sensors) {
         sensors.push_back(
-            fb::CreateCaptureSensor(fbb, s.sensorId, s.cameraId, s.selected, s.saved, s.target));
+            fb::CreateCaptureSensor(fbb, s.sensorId, s.cameraId, s.selected, s.saved, s.target,
+                                    str(fbb, s.name), str(fbb, s.laneName)));
     }
     return fb::CreateCaptureStatusReply(
         fbb, static_cast<fb::CaptureState>(static_cast<std::uint8_t>(status.state)),
@@ -311,6 +312,7 @@ CommandHandler::onStartCapture(Fbb& fbb, const fb::StartCaptureRequest& req) con
     case fb::CaptureMode::Single:
     case fb::CaptureMode::Multiple:
     case fb::CaptureMode::SizeRange:
+    case fb::CaptureMode::All:
         request.filter.mode = static_cast<CaptureMode>(static_cast<std::uint8_t>(req.mode()));
         break;
     default:

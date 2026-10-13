@@ -11,7 +11,7 @@ Rectangle {
     required property var capture // CaptureModel
 
     readonly property bool locked: page.capture.running || page.capture.busy
-    readonly property var modeNames: ["No potatoes", "Single potato", "Multiple potatoes", "Size range"]
+    readonly property var modeNames: ["No potatoes", "Single potato", "Multiple potatoes", "Size range", "All photos"]
 
     color: Theme.background
 
@@ -29,7 +29,7 @@ Rectangle {
         spacing: Theme.spacing
 
         VsText {
-            text: "Photo capture"
+            text: "Recording"
             variant: VsText.Title
         }
 
@@ -301,6 +301,8 @@ Rectangle {
                 required property bool firstOfCamera
                 required property int saved
                 required property int target
+                required property string sensorName
+                required property string laneName
 
                 width: ListView.view.width
 
@@ -318,18 +320,6 @@ Rectangle {
                         variant: VsText.Caption
                         font.letterSpacing: 1.5
                     }
-                    VsButton {
-                        objectName: "camera" + entry.cameraId + "Toggle"
-                        anchors {
-                            right: parent.right
-                            verticalCenter: parent.verticalCenter
-                        }
-                        implicitWidth: 120
-                        text: entry.cameraSelected ? "Camera on" : "Camera off"
-                        primary: entry.cameraSelected
-                        enabled: !page.locked
-                        onClicked: page.capture.setCameraSelected(entry.cameraId, !entry.cameraSelected)
-                    }
                 }
                 Item {
                     width: parent.width
@@ -341,7 +331,8 @@ Rectangle {
                             leftMargin: Theme.padding
                             verticalCenter: parent.verticalCenter
                         }
-                        text: "Sensor " + entry.sensorId
+                        text: (entry.laneName !== "" ? entry.laneName + " - " : "")
+              + (entry.sensorName !== "" ? entry.sensorName : "Sensor " + entry.sensorId)
                         color: entry.selected ? Theme.textPrimary : Theme.textDisabled
                     }
                     VsText {

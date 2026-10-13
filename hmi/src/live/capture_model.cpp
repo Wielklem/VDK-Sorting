@@ -6,7 +6,8 @@
 namespace vsort::hmi {
 
 namespace {
-constexpr int kLastMode = 3; // size range
+constexpr int kSizeRange = 3;
+constexpr int kLastMode = 4; // all photos
 } // namespace
 
 CaptureModel::CaptureModel(ServiceClient& client, int pollMs, QObject* parent)
@@ -46,6 +47,10 @@ QVariant CaptureModel::data(const QModelIndex& index, int role) const {
         return row.target;
     case FirstOfCameraRole:
         return index.row() == 0 || rows_.at(index.row() - 1).cameraId != row.cameraId;
+    case SensorNameRole:
+        return row.sensorName;
+    case LaneNameRole:
+        return row.laneName;
     default:
         return {};
     }
@@ -58,7 +63,9 @@ QHash<int, QByteArray> CaptureModel::roleNames() const {
             {CameraSelectedRole, "cameraSelected"},
             {SavedRole, "saved"},
             {TargetRole, "target"},
-            {FirstOfCameraRole, "firstOfCamera"}};
+            {FirstOfCameraRole, "firstOfCamera"},
+            {SensorNameRole, "sensorName"},
+            {LaneNameRole, "laneName"}};
 }
 
 void CaptureModel::setFolder(const QString& folder) {
@@ -231,6 +238,8 @@ void CaptureModel::mergeSensors(const CaptureStatusData& status) {
             Row& row = rows_[i];
             row.saved = sensors.at(i).saved;
             row.target = sensors.at(i).target;
+            row.sensorName = sensors.at(i).name;
+            row.laneName = sensors.at(i).laneName;
             if (fromSession) {
                 row.selected = sensors.at(i).selected;
             }
@@ -251,7 +260,9 @@ void CaptureModel::mergeSensors(const CaptureStatusData& status) {
                             .cameraId = s.cameraId,
                             .selected = fromSession ? s.selected : before.value(s.sensorId, true),
                             .saved = s.saved,
-                            .target = s.target});
+                            .target = s.target,
+                            .sensorName = s.name,
+                            .laneName = s.laneName});
     }
     endResetModel();
 }
@@ -270,7 +281,7 @@ bool CaptureModel::computeCanStart() const {
     if (!client_.connected() || locked() || folder_.trimmed().isEmpty() || photos_ < 1) {
         return false;
     }
-    if (mode_ == kLastMode && !(minMm_ >= 0.0 && maxMm_ >= minMm_)) {
+    if (mode_ == kSizeRange && !(minMm_ >= 0.0 && maxMm_ >= minMm_)) {
         return false;
     }
     return std::ranges::any_of(rows_, [](const Row& row) { return row.selected; });
