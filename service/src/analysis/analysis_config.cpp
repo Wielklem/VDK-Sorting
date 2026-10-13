@@ -43,6 +43,8 @@ json paramsSchema() {
           {"min_hull_area_px", {{"type", "number"}, {"minimum", 0.0}, {"maximum", 1.0e9}}},
           {"min_solidity", {{"type", "number"}, {"minimum", 0.0}, {"maximum", 1.0}}},
           {"max_aspect_ratio", {{"type", "number"}, {"minimum", 1.0}, {"maximum", 100.0}}},
+          {"split_min_depth_frac", {{"type", "number"}, {"minimum", 0.01}, {"maximum", 1.0}}},
+          {"split_min_solidity", {{"type", "number"}, {"minimum", 0.0}, {"maximum", 1.0}}},
           {"mm_per_px", {{"type", "number"}, {"minimum", 0.0001}, {"maximum", 1000.0}}},
           {"roi_width_mm", {{"type", "number"}, {"minimum", 0.0}, {"maximum", 100000.0}}}}}};
 }
@@ -62,6 +64,8 @@ json paramsToJson(const AnalysisParams& p) {
                 {"min_hull_area_px", p.minHullAreaPx},
                 {"min_solidity", p.minSolidity},
                 {"max_aspect_ratio", p.maxAspectRatio},
+                {"split_min_depth_frac", p.splitMinDepthFrac},
+                {"split_min_solidity", p.splitMinSolidity},
                 {"mm_per_px", p.mmPerPx},
                 {"roi_width_mm", p.roiWidthMm}};
 }
@@ -101,6 +105,9 @@ AnalysisParams paramsFromJson(const json& j, const std::string& path, std::strin
     p.minHullAreaPx = j.at("min_hull_area_px").get<double>();
     p.minSolidity = j.at("min_solidity").get<double>();
     p.maxAspectRatio = j.at("max_aspect_ratio").get<double>();
+    // Optional: config files from before these parameters use the defaults.
+    p.splitMinDepthFrac = j.value("split_min_depth_frac", AnalysisParams{}.splitMinDepthFrac);
+    p.splitMinSolidity = j.value("split_min_solidity", AnalysisParams{}.splitMinSolidity);
     p.mmPerPx = j.at("mm_per_px").get<double>();
     p.roiWidthMm = j.at("roi_width_mm").get<double>();
     return p;

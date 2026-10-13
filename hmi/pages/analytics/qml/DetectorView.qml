@@ -44,16 +44,75 @@ Rectangle {
         property real to: 100000
         property int decimals: 0
         property string unit: ""
+        property string hint: "" // explanation, shown behind the (i) button
+        property bool hintOpen: false
 
         width: parent ? parent.width : 0
-        height: Theme.controlHeight
+        height: Theme.controlHeight + (hintText.visible ? hintText.implicitHeight : 0)
+
+        Item {
+            id: rowRef // the input row; the hint sits below it
+
+            width: 1
+            height: Theme.controlHeight
+        }
+
+        Item {
+            id: infoButton
+
+            objectName: "info_" + field.key
+            visible: field.hint !== ""
+            anchors {
+                right: input.left
+                rightMargin: Theme.spacing
+                verticalCenter: rowRef.verticalCenter
+            }
+            width: visible ? 32 : 0
+            height: Theme.controlHeight
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: 20
+                height: 20
+                radius: 10
+                color: field.hintOpen ? Theme.textSecondary : "transparent"
+                border.color: Theme.textSecondary
+                border.width: 1
+
+                VsText {
+                    anchors.centerIn: parent
+                    variant: VsText.Caption
+                    color: field.hintOpen ? Theme.surface : Theme.textSecondary
+                    text: "i"
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: field.hintOpen = !field.hintOpen
+            }
+        }
+
+        VsText {
+            id: hintText
+
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: rowRef.bottom
+            }
+            visible: field.hint !== "" && field.hintOpen
+            variant: VsText.Caption
+            wrapMode: Text.Wrap
+            text: field.hint
+        }
 
         VsText {
             anchors {
                 left: parent.left
-                right: input.left
+                right: infoButton.left
                 rightMargin: Theme.spacing
-                verticalCenter: parent.verticalCenter
+                verticalCenter: rowRef.verticalCenter
             }
             variant: VsText.Caption
             wrapMode: Text.NoWrap
@@ -67,7 +126,7 @@ Rectangle {
             objectName: "param_" + field.key
             anchors {
                 right: parent.right
-                verticalCenter: parent.verticalCenter
+                verticalCenter: rowRef.verticalCenter
             }
             width: 130
             from: field.from
@@ -261,22 +320,26 @@ Rectangle {
                 }
                 ParamField {
                     key: "morph_kernel_px"
+                    hint: "Size of the round kernel used by erode and dilate. Larger: coarser clean-up. 0 = erode and dilate are skipped."
                     label: "Kernel size"
                     to: 51
                     unit: "px"
                 }
                 ParamField {
                     key: "erode_iterations"
+                    hint: "How many times the mask is shrunk. Removes small noise specks. Too high: eats into the object edge."
                     label: "Erode iterations"
                     to: 20
                 }
                 ParamField {
                     key: "dilate_iterations"
+                    hint: "How many times the mask is grown again. Reconnects fragments of one object. Too high: objects get fatter and can merge."
                     label: "Dilate iterations"
                     to: 20
                 }
                 ParamField {
                     key: "edge_smooth_sigma_px"
+                    hint: "Blurs the mask and cuts it again to round off a jagged outline. Higher: smoother outline, but small notches are filled too, including the pinch between touching objects. 0 = off."
                     label: "Edge smoothing (0 = off)"
                     to: 50
                     decimals: 1
@@ -288,12 +351,14 @@ Rectangle {
                 }
                 ParamField {
                     key: "min_blob_area_px"
+                    hint: "Mask parts with fewer pixels than this are treated as noise and dropped before anything else."
                     label: "Min. area (noise)"
                     to: 1000000
                     unit: "px²"
                 }
                 ParamField {
                     key: "min_diameter_px"
+                    hint: "Objects with a smaller diameter are ignored. Raise it to drop small debris, lower it if small objects are missed."
                     label: "Min. diameter"
                     to: 10000
                     decimals: 1
@@ -301,29 +366,50 @@ Rectangle {
                 }
                 ParamField {
                     key: "min_hull_area_px"
+                    hint: "Objects whose convex outline (the 'rubber band' around them) covers fewer pixels than this are ignored."
                     label: "Min. hull area"
                     to: 10000000
                     unit: "px²"
                 }
                 ParamField {
                     key: "min_solidity"
+                    hint: "Object area divided by the area of its convex outline. 1 = perfectly round or convex. Objects below this are ignored. Lower: accepts irregular shapes, but also objects with background pulled in."
                     label: "Min. solidity"
                     to: 1
                     decimals: 2
                 }
                 ParamField {
                     key: "max_aspect_ratio"
+                    hint: "Longest side of the bounding box divided by the shortest, in either orientation. Objects above this are ignored. 3 = up to three times longer than wide."
                     label: "Max. aspect ratio"
                     from: 1
                     to: 100
                     decimals: 1
                 }
-
+                Heading {
+                    text: "Splitting touching objects"
+                }
+                ParamField {
+                    key: "split_min_depth_frac"
+                    label: "Min. notch depth"
+                    from: 0.01
+                    to: 1
+                    decimals: 2
+                    hint: "Two objects that touch are cut apart where the outline pinches inward. Depth of that notch as a fraction of the blob size. Lower: a touching pair that is still counted as one gets split. Higher: a single bent (kidney-shaped) object stops being cut in two. 1 = never split."
+                }
+                ParamField {
+                    key: "split_min_solidity"
+                    label: "Min. piece solidity"
+                    to: 1
+                    decimals: 2
+                    hint: "A cut is only made if both pieces are at least this convex (area / hull area), or more convex than the uncut blob. Higher: lumpy single objects are less likely to be cut. Lower: uneven cuts of a real pair are accepted."
+                }
                 Heading {
                     text: "Detection buffer around the ROI"
                 }
                 ParamField {
                     key: "roi_buffer_px.left"
+                    hint: "Detection runs this far outside the ROI, on each side, so an object on the ROI edge is seen whole. Only objects whose centre lies inside the ROI count; the others belong to a neighbour cup."
                     label: "Left"
                     to: 10000
                     unit: "px"
@@ -352,6 +438,7 @@ Rectangle {
                 }
                 ParamField {
                     key: "roi_width_mm"
+                    hint: "Real width of the ROI. Scale = this width / ROI width in pixels. Only valid while the ROI is exactly one cup wide (quick fix until the calibration exists). 0 = use the Scale field below."
                     label: "ROI width (0 = use mm/px)"
                     to: 100000
                     decimals: 1
@@ -359,6 +446,7 @@ Rectangle {
                 }
                 ParamField {
                     key: "mm_per_px"
+                    hint: "Millimetres per camera pixel. Used only when ROI width is 0."
                     label: "Scale"
                     from: 0.0001
                     to: 1000

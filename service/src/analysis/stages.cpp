@@ -45,6 +45,137 @@ bool inside(const cv::Rect& rect, const cv::Point2d& p) {
            p.y < rect.y + rect.height;
 }
 
+// Splitting of touching objects (port of eqraftvision split_touching_blobs_concave, one cut per
+// pass). Two objects pinch inward where they meet; a single object has at most one deep notch.
+constexpr double kSplitMinSolidity = 0.80;     // both pieces must be at least this convex ...
+constexpr double kSplitMinChordInside = 0.75;  // share of the cut line that must lie in the mask
+constexpr double kSplitMinPieceFrac = 0.10;    // each piece: at least this share of the blob area
+constexpr int kSplitSeamPx = 3;                // width of the cut
+constexpr int kSplitMaxDepth = 4;              // cuts in a row on one blob (max 16 pieces)
+constexpr std::size_t kSplitMaxCandidates = 8; // deepest notches considered
+
+double solidityOf(const cv::Mat& mask) {
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    if (contours.empty()) {
+        return 0.0;
+    }
+    const auto& largest =
+        *std::ranges::max_element(contours, {}, [](const auto& c) { return cv::contourArea(c); });
+    std::vector<cv::Point> hull;
+    cv::convexHull(largest, hull);
+    const double hullArea = cv::contourArea(hull);
+    return hullArea > 0.0 ? static_cast<double>(cv::countNonZero(mask)) / hullArea : 0.0;
+}
+
+double chordInsideFraction(const cv::Mat& mask, cv::Point a, cv::Point b) {
+    cv::LineIterator it{mask, a, b, 8};
+    int on = 0;
+    for (int i = 0; i < it.count; ++i, ++it) {
+        if (**it != 0) {
+            ++on;
+        }
+    }
+    return it.count > 0 ? static_cast<double>(on) / static_cast<double>(it.count) : 0.0;
+}
+
+// Two pieces if the shape has a real pinch, otherwise empty.
+std::vector<cv::Mat> cutAtDeepestPinch(const cv::Mat& mask, const AnalysisParams& p) {
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
+    if (contours.empty()) {
+        return {};
+    }
+    const auto& contour =
+        *std::ranges::max_element(contours, {}, [](const auto& c) { return cv::contourArea(c); });
+    std::vector<int> hullIdx;
+    cv::convexHull(contour, hullIdx, false, false);
+    if (hullIdx.size() < 3) {
+        return {};
+    }
+    std::ranges::sort(hullIdx);
+    std::vector<cv::Vec4i> defects;
+    cv::convexityDefects(contour, hullIdx, defects);
+
+    const double area = static_cast<double>(cv::countNonZero(mask));
+    const double minDepth = p.splitMinDepthFrac * std::sqrt(area);
+    std::vector<std::pair<double, cv::Point>> deep; // depth, deepest point of the notch
+    for (const auto& d : defects) {
+        const double depth = d[3] / 256.0;
+        if (depth >= minDepth) {
+            deep.emplace_back(depth, contour[static_cast<std::size_t>(d[2])]);
+        }
+    }
+    if (deep.size() < 2) {
+        return {};
+    }
+    std::ranges::sort(deep, [](const auto& a, const auto& b) { return a.first > b.first; });
+    deep.resize(std::min(deep.size(), kSplitMaxCandidates));
+
+    struct CutPair {
+        double dist;
+        cv::Point a;
+        cv::Point b;
+    };
+    std::vector<CutPair> pairs;
+    for (std::size_t i = 0; i < deep.size(); ++i) {
+        for (std::size_t j = i + 1; j < deep.size(); ++j) {
+            pairs.push_back({cv::norm(deep[i].second - deep[j].second), deep[i].second,
+                             deep[j].second});
+        }
+    }
+    std::ranges::sort(pairs, {}, &CutPair::dist); // shortest cut first
+
+    const double parentSolidity = solidityOf(mask);
+    const int minPiecePx = static_cast<int>(kSplitMinPieceFrac * area);
+    for (const auto& pair : pairs) {
+        if (chordInsideFraction(mask, pair.a, pair.b) < kSplitMinChordInside) {
+            continue;
+        }
+        cv::Mat trial = mask.clone();
+        cv::line(trial, pair.a, pair.b, cv::Scalar{0}, kSplitSeamPx);
+        cv::Mat labels;
+        cv::Mat stats;
+        cv::Mat centroids;
+        const int n = cv::connectedComponentsWithStats(trial, labels, stats, centroids, 8, CV_32S);
+        std::vector<int> big;
+        for (int label = 1; label < n; ++label) {
+            if (stats.at<int>(label, cv::CC_STAT_AREA) >= minPiecePx) {
+                big.push_back(label);
+            }
+        }
+        if (big.size() != 2) {
+            continue;
+        }
+        std::vector<cv::Mat> pieces;
+        for (const int label : big) {
+            cv::Mat piece;
+            cv::compare(labels, cv::Scalar{static_cast<double>(label)}, piece, cv::CMP_EQ);
+            pieces.push_back(std::move(piece));
+        }
+        const double worst = std::min(solidityOf(pieces[0]), solidityOf(pieces[1]));
+        if (worst >= p.splitMinSolidity || worst > parentSolidity) {
+            return pieces;
+        }
+    }
+    return {};
+}
+
+// Recursive: a piece may hold a further pinch. Always returns at least the input itself.
+void splitAtPinches(const cv::Mat& mask, int depth, const AnalysisParams& p,
+                    std::vector<cv::Mat>& out) {
+    if (depth < kSplitMaxDepth) {
+        const auto pieces = cutAtDeepestPinch(mask, p);
+        if (pieces.size() == 2) {
+            for (const auto& piece : pieces) {
+                splitAtPinches(piece, depth + 1, p, out);
+            }
+            return;
+        }
+    }
+    out.push_back(mask);
+}
+
 // Port of eqraftvision pca_oriented_rect().
 void orientedExtent(Blob& blob) {
     const cv::Moments m = cv::moments(blob.contour);
@@ -181,35 +312,40 @@ Result<> ColorSegmentationStage::process(AnalysisContext& ctx) const {
         cv::compare(labels(padded), cv::Scalar{static_cast<double>(label)}, component, cv::CMP_EQ);
         fillHoles(component);
 
-        std::vector<std::vector<cv::Point>> contours;
-        cv::findContours(component, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE,
-                         padded.tl());
-        if (contours.empty()) {
-            continue;
-        }
-        Blob blob;
-        blob.contour = *std::ranges::max_element(contours, {},
-                                                 [](const auto& c) { return cv::contourArea(c); });
-        blob.areaPx = cv::countNonZero(component);
-        blob.diameterPx = diameterOf(blob.contour);
-        cv::convexHull(blob.contour, blob.hull);
-        blob.hullAreaPx = cv::contourArea(blob.hull);
-        blob.solidity = blob.hullAreaPx > 0.0 ? blob.areaPx / blob.hullAreaPx : 0.0;
+        std::vector<cv::Mat> pieces; // touching objects -> one piece each, filtered separately
+        splitAtPinches(component, 0, p, pieces);
+        for (const cv::Mat& piece : pieces) {
+            std::vector<std::vector<cv::Point>> contours;
+            cv::findContours(piece, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE,
+                             padded.tl());
+            if (contours.empty()) {
+                continue;
+            }
+            Blob blob;
+            blob.contour = *std::ranges::max_element(
+                contours, {}, [](const auto& c) { return cv::contourArea(c); });
+            blob.areaPx = cv::countNonZero(piece);
+            blob.diameterPx = diameterOf(blob.contour);
+            cv::convexHull(blob.contour, blob.hull);
+            blob.hullAreaPx = cv::contourArea(blob.hull);
+            blob.solidity = blob.hullAreaPx > 0.0 ? blob.areaPx / blob.hullAreaPx : 0.0;
 
-        const cv::Rect hullBox = cv::boundingRect(blob.hull);
-        const double aspect =
-            hullBox.height > 0 ? static_cast<double>(hullBox.width) / hullBox.height : 0.0;
-        const bool shapeOk = aspect >= 1.0 / p.maxAspectRatio && aspect <= p.maxAspectRatio &&
-                             blob.solidity >= p.minSolidity;
-        if (!shapeOk || blob.diameterPx < p.minDiameterPx || blob.hullAreaPx < p.minHullAreaPx) {
-            continue;
+            const cv::Rect hullBox = cv::boundingRect(blob.hull);
+            const double aspect =
+                hullBox.height > 0 ? static_cast<double>(hullBox.width) / hullBox.height : 0.0;
+            const bool shapeOk = aspect >= 1.0 / p.maxAspectRatio &&
+                                 aspect <= p.maxAspectRatio && blob.solidity >= p.minSolidity;
+            if (!shapeOk || blob.diameterPx < p.minDiameterPx ||
+                blob.hullAreaPx < p.minHullAreaPx) {
+                continue;
+            }
+            const cv::Moments m = cv::moments(blob.hull);
+            if (m.m00 <= 0.0) {
+                continue;
+            }
+            blob.centroid = cv::Point2d{m.m10 / m.m00, m.m01 / m.m00};
+            (inside(roi, blob.centroid) ? ctx.blobs : ctx.neighbours).push_back(std::move(blob));
         }
-        const cv::Moments m = cv::moments(blob.hull);
-        if (m.m00 <= 0.0) {
-            continue;
-        }
-        blob.centroid = cv::Point2d{m.m10 / m.m00, m.m01 / m.m00};
-        (inside(roi, blob.centroid) ? ctx.blobs : ctx.neighbours).push_back(std::move(blob));
     }
     std::ranges::sort(ctx.blobs, std::ranges::greater{}, &Blob::areaPx);
 

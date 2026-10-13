@@ -50,6 +50,14 @@ struct AnalysisParams {
     double minHullAreaPx{6000.0};
     double minSolidity{0.85};   // area / hull area; background pulled in lowers it
     double maxAspectRatio{3.0}; // bounding box, either orientation
+    // Splitting of touching objects (two potatoes that fuse into one blob).
+    // Min. notch depth where the objects meet, as a fraction of sqrt(blob area). Lower: splits
+    // sooner (a touching pair counted as one). Higher: splits less (a kidney-shaped single object
+    // cut in two). 1.0 = never split.
+    double splitMinDepthFrac{0.07};
+    // Both pieces of a cut must be at least this convex (area / hull area), or more convex than
+    // the uncut blob. Higher: refuses uneven cuts (lumpy single object). Lower: accepts them.
+    double splitMinSolidity{0.80};
     // Size (P60.60). roiWidthMm > 0: mm per px = roiWidthMm / lane ROI width in px; otherwise
     // mmPerPx. QUICK FIX, strictly for the current test set-up: it only works because the lane
     // ROI is drawn exactly as wide as one cup (200 mm). Replaced by the G30.40 calibration

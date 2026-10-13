@@ -213,6 +213,36 @@ TEST(AnalysisPipeline, MeasuresOneObject) {
     EXPECT_GT(ctx->blobs[0].solidity, 0.95);
 }
 
+TEST(AnalysisPipeline, SplitCanBeSwitchedOffAndOldConfigUsesDefaults) {
+    const auto f = ellipseFrame(0, 1,
+                                {{.centre = {230, 240}, .halfAxes = {110, 75}},
+                                 {.centre = {390, 240}, .halfAxes = {70, 65}}});
+    auto params = testParams();
+    params.splitMinDepthFrac = 1.0; // no notch is that deep
+    const auto ctx = runOn(f->frame, params, {.x = 0, .y = 0, .width = 640, .height = 480});
+    ASSERT_TRUE(ctx.has_value()) << ctx.error().what();
+    EXPECT_EQ(ctx->blobs.size(), 1U);
+
+    auto j = analysisDefaults();
+    j["defaults"].erase("split_min_depth_frac");
+    j["defaults"].erase("split_min_solidity");
+    const auto c = analysisConfigFromJson(j);
+    ASSERT_TRUE(c.has_value()) << c.error().what();
+    EXPECT_DOUBLE_EQ(c->defaults.splitMinDepthFrac, AnalysisParams{}.splitMinDepthFrac);
+    EXPECT_DOUBLE_EQ(c->defaults.splitMinSolidity, AnalysisParams{}.splitMinSolidity);
+}
+
+TEST(AnalysisPipeline, TwoTouchingObjectsAreSplitIntoTwo) {
+    // Overlapping ellipses: one connected blob with a pinch on both sides.
+    const auto f = ellipseFrame(0, 1,
+                                {{.centre = {230, 240}, .halfAxes = {110, 75}},
+                                 {.centre = {390, 240}, .halfAxes = {70, 65}}});
+    const auto ctx = runOn(f->frame, testParams(), {.x = 0, .y = 0, .width = 640, .height = 480});
+    ASSERT_TRUE(ctx.has_value()) << ctx.error().what();
+    EXPECT_EQ(ctx->blobs.size(), 2U);
+    EXPECT_EQ(value(ctx->values, kKeyCount), 2.0);
+}
+
 TEST(AnalysisPipeline, EmptyCupAndNoiseGiveCountZero) {
     const auto f = ellipseFrame(0, 1, {{.centre = {100, 100}, .halfAxes = {8, 8}}}); // speck
     const auto ctx = runOn(f->frame, testParams(), {.x = 0, .y = 0, .width = 640, .height = 480});
