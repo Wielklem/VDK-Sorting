@@ -312,6 +312,7 @@ void CaptureModule::runWriter(const std::stop_token& stop) {
     for (;;) {
         auto image = queue_.tryPop();
         if (!image) {
+            closeCsvWhenFinished();
             if (stop.stop_requested()) {
                 return;
             }
@@ -370,6 +371,18 @@ void CaptureModule::write(const CaptureImage& image) {
         state_ = CaptureState::Done;
         active_.store(false, std::memory_order_release);
         spdlog::info("capture: done, photos are in {}", toUtf8(session_));
+    }
+}
+
+// The writer thread owns csv_. Once the capture is over (Done, Stopped or Failed) and the queue is
+// empty the file is closed, so it can be opened, moved or deleted (Windows refuses otherwise).
+void CaptureModule::closeCsvWhenFinished() {
+    if (!csv_.is_open()) {
+        return;
+    }
+    const std::scoped_lock lock{mutex_};
+    if (state_ != CaptureState::Running) {
+        csv_.close();
     }
 }
 

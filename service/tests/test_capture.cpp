@@ -136,7 +136,7 @@ TEST(CaptureValuesTest, ReadFromMeasurementKeys) {
 }
 
 TEST(CaptureUtf8, PathsRoundTrip) {
-    const fs::path path = fs::path{"photos"} / "k\xC3\xA4se";
+    const fs::path path = fs::path{"photos"} / fs::path{std::u8string{u8"k\u00e4se"}};
     EXPECT_EQ(toUtf8(pathFromUtf8(toUtf8(path))), toUtf8(path));
     EXPECT_EQ(toUtf8(path).find("k\xC3\xA4se") != std::string::npos, true);
 }
@@ -293,6 +293,22 @@ TEST_F(CaptureModuleTest, FolderThatCannotBeCreatedIsAnIoError) {
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, Errc::IoError);
     EXPECT_EQ(module.captureStatus().state, CaptureState::Idle);
+}
+
+TEST_F(CaptureModuleTest, ReleasesTheSessionFilesWhenTheCaptureIsOver) {
+    ASSERT_TRUE(module.startCapture(makeRequest(1, {1})).has_value());
+    module.commit(makeImage(1, module.reserve(1, values(0)).value_or(0U), 0));
+    ASSERT_TRUE(waitForState(module, CaptureState::Done));
+    const auto csv = module.captureStatus().sessionFolder / "captures.csv";
+    bool removed = false; // Windows cannot delete a file that is still open
+    for (int i = 0; i < 200 && !removed; ++i) {
+        std::error_code ec;
+        removed = fs::remove(csv, ec) && !ec;
+        if (!removed) {
+            std::this_thread::sleep_for(10ms);
+        }
+    }
+    EXPECT_TRUE(removed);
 }
 
 TEST_F(CaptureModuleTest, TooLittleFreeSpaceIsAnIoError) {

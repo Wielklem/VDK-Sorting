@@ -72,6 +72,7 @@ private:
     void stopWriter() noexcept;
     void runWriter(const std::stop_token& stop);
     void write(const CaptureImage& image);
+    void closeCsvWhenFinished();
     void fail(const std::string& what);
 
     CaptureOptions options_;
