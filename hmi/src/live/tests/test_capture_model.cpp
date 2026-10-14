@@ -137,7 +137,7 @@ TEST_F(CaptureModelTest, CameraToggleSelectsAllSensorsOfThatCamera) {
 }
 
 TEST_F(CaptureModelTest, StartNeedsAFolderACountAndAValidSizeRange) {
-    model.setMode(3);
+    model.setMode(4); // size range
     model.setMinMm(100.0);
     model.setMaxMm(50.0);
     EXPECT_FALSE(model.canStart());
@@ -150,7 +150,7 @@ TEST_F(CaptureModelTest, StartNeedsAFolderACountAndAValidSizeRange) {
     model.setPhotosPerSensor(0); // clamped to 1
     EXPECT_EQ(model.photosPerSensor(), 1);
     model.setMode(9); // clamped to the last mode
-    EXPECT_EQ(model.mode(), 3);
+    EXPECT_EQ(model.mode(), 4);
 }
 
 TEST_F(CaptureModelTest, ServiceErrorIsShownAndTheModelIsFreeAgain) {
