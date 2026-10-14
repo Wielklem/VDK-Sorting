@@ -137,7 +137,7 @@ TEST_F(CaptureModelTest, CameraToggleSelectsAllSensorsOfThatCamera) {
 }
 
 TEST_F(CaptureModelTest, StartNeedsAFolderACountAndAValidSizeRange) {
-    model.setMode(4); // size range
+    model.setMode(3); // size range
     model.setMinMm(100.0);
     model.setMaxMm(50.0);
     EXPECT_FALSE(model.canStart());
